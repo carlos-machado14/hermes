@@ -34,10 +34,10 @@ jobs:
           git add -A
           git commit -m "chore: bootstrap Hermes from official upstream"
 
-          # Repository rules block GitHub Actions from updating branches.
-          # Publish the exact import commit as a temporary tag; an authorized
-          # user ref will turn it into a reviewable branch/PR afterwards.
+          echo "IMPORT_COMMIT_SHA=$(git rev-parse HEAD)"
+          echo "IMPORT_TREE_SHA=$(git rev-parse HEAD^{tree})"
+
           git tag -f bootstrap-official-upstream
           git push --force origin refs/tags/bootstrap-official-upstream
 
-# bootstrap-trigger: 4
+# bootstrap-trigger: 5
