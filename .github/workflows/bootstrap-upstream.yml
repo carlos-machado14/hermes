@@ -23,31 +23,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          cp .github/workflows/bootstrap-upstream.yml /tmp/bootstrap-upstream.yml
           git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /tmp/hermes-upstream
           rm -rf /tmp/hermes-upstream/.git
 
           find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
           cp -a /tmp/hermes-upstream/. .
 
-          mkdir -p .github/workflows
-          cp /tmp/bootstrap-upstream.yml .github/workflows/bootstrap-upstream.yml
-
-          cat > .hermes-upstream <<'EOF'
-          source=https://github.com/NousResearch/hermes-agent
-          imported_by=bootstrap-upstream.yml
-          EOF
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-
-          if git diff --cached --quiet; then
-            echo "Nothing to import."
-            exit 0
-          fi
-
           git commit -m "chore: bootstrap Hermes from official upstream"
-          git push --force origin HEAD:bootstrap/official-upstream
 
-# bootstrap-trigger: 3
+          # Repository rules block GitHub Actions from updating branches.
+          # Publish the exact import commit as a temporary tag; an authorized
+          # user ref will turn it into a reviewable branch/PR afterwards.
+          git tag -f bootstrap-official-upstream
+          git push --force origin refs/tags/bootstrap-official-upstream
+
+# bootstrap-trigger: 4
