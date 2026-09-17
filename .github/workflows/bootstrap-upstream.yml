@@ -1,0 +1,51 @@
+name: Bootstrap Hermes Upstream
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/bootstrap-upstream.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout destination
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import official Hermes upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cp .github/workflows/bootstrap-upstream.yml /tmp/bootstrap-upstream.yml
+          git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /tmp/hermes-upstream
+          rm -rf /tmp/hermes-upstream/.git
+
+          find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          cp -a /tmp/hermes-upstream/. .
+
+          mkdir -p .github/workflows
+          cp /tmp/bootstrap-upstream.yml .github/workflows/bootstrap-upstream.yml
+
+          cat > .hermes-upstream <<'EOF'
+          source=https://github.com/NousResearch/hermes-agent
+          imported_by=bootstrap-upstream.yml
+          EOF
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "Nothing to import."
+            exit 0
+          fi
+
+          git commit -m "chore: bootstrap Hermes from official upstream"
+          git push origin HEAD:main
