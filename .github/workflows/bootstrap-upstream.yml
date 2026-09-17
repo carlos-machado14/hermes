@@ -48,6 +48,6 @@ jobs:
           fi
 
           git commit -m "chore: bootstrap Hermes from official upstream"
-          git push origin HEAD:main
+          git push --force origin HEAD:bootstrap/official-upstream
 
-# bootstrap-trigger: 2
+# bootstrap-trigger: 3
