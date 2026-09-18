@@ -109,7 +109,7 @@ def _fallback_chain_phrase() -> str:
     except Exception:
         return "Nenhum provedor de backup funcionou."
     if chain:
-        return "No backup provider succeeded either."
+        return "Nenhum provedor de backup funcionou."
     return (
         "Nenhum provedor de backup está configurado — adicione um com `hermes fallback add` "
         "ou defina o padrão das rotinas com `cron.model` + `cron.model_provider` no config.yaml."
