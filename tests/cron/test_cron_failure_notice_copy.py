@@ -81,9 +81,9 @@ def test_blocked_config_notice_says_it_did_not_run_and_will_self_heal():
         JOB, success=False, error="[blocked_config] provider credential missing: no key",
         final_response="", output_file=None)
     assert blocked is True
-    assert "did not run" in text
+    assert "não executou" in text
     assert "provider credential missing: no key" in text
-    assert "Nothing was charged" in text
+    assert "Nada foi cobrado" in text
     # Some blocks (MCP server temporarily down) clear on their own, so the retry
     # line must not condition the retry on the user fixing something.
     assert "once this is fixed" not in text

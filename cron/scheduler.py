@@ -107,12 +107,12 @@ def _fallback_chain_phrase() -> str:
         cfg = load_config() or {}
         chain = get_fallback_chain(cfg)
     except Exception:
-        return "No backup provider succeeded either."
+        return "Nenhum provedor de backup funcionou."
     if chain:
-        return "No backup provider succeeded either."
+        return "Nenhum provedor de backup funcionou."
     return (
-        "No backup provider is configured — add one with `hermes fallback add`, "
-        "or set a cron-wide default via `cron.model` + `cron.model_provider` in config.yaml."
+        "Nenhum provedor de backup está configurado — adicione um com `hermes fallback add` "
+        "ou defina o padrão das rotinas com `cron.model` + `cron.model_provider` no config.yaml."
     )
 
 
@@ -139,9 +139,9 @@ def _failure_streak_nudge(job: dict) -> str:
         return ""
     job_ref = job.get("name") or job.get("id") or "this job"
     return (
-        f"\nThis job has failed {streak} runs in a row — worth a review. "
-        f"Fix its prompt/config, or pause it with `hermes cron pause {job_ref}` "
-        "(resume/remove also available) to stop the noise."
+        f"\nEsta rotina falhou {streak} vezes seguidas — vale revisar. "
+        f"Corrija o prompt/configuração ou pause com `hermes cron pause {job_ref}` "
+        "(também é possível retomar/remover) para interromper os alertas."
     )
 
 
