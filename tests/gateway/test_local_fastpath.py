@@ -69,6 +69,26 @@ def test_create_action_uses_static_no_agent_cron(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_local_parser_cannot_change_deterministic_action(monkeypatch):
+    monkeypatch.setattr(lf, "_config", lambda: {"enabled": True})
+    monkeypatch.setattr(
+        lf,
+        "_parse_local_json",
+        lambda *_args: {"route": "local", "action": "remove", "job_ref": "Tudo"},
+    )
+
+    event = SimpleNamespace(
+        text="Me lembre amanhã às 10h de estudar",
+        media_urls=[],
+        media_types=[],
+        get_command=lambda: None,
+    )
+    source = SimpleNamespace(platform=SimpleNamespace(value="telegram"), chat_id="123", thread_id=None)
+
+    assert await lf.try_handle_local_fastpath(event, source) is None
+
+
+@pytest.mark.asyncio
 async def test_local_parser_failure_falls_through_to_main(monkeypatch):
     monkeypatch.setattr(lf, "_config", lambda: {"enabled": True})
     monkeypatch.setattr(lf, "_parse_local_json", lambda *_args: None)
