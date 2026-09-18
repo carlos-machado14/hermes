@@ -43,8 +43,8 @@ hermes config set model.api_mode chat_completions
 # Remove the old local-Qwen override if present. Provider metadata owns the remote context.
 hermes config unset model.context_length >/dev/null 2>&1 || true
 
-echo "Configuring agent and failover policy..."
-hermes config set agent.reasoning_effort none
+echo "Configuring failover policy..."
+hermes config unset agent.reasoning_effort >/dev/null 2>&1 || true
 hermes config set fallback_providers '[]'
 
 echo "Configuring cron model inheritance..."
