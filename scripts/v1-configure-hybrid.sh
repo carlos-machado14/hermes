@@ -47,9 +47,11 @@ echo "Configuring agent and failover policy..."
 hermes config set agent.reasoning_effort none
 hermes config set fallback_providers '[]'
 
-echo "Configuring agent-backed cron jobs..."
-hermes config set cron.model "$MAIN_MODEL"
-hermes config set cron.model_provider "$MAIN_PROVIDER"
+echo "Configuring cron model inheritance..."
+# Remove the old fleet-wide Qwen override. Existing jobs retain their creation-time snapshots;
+# new agent-backed jobs snapshot the current main model (MiMo). Static reminders are no_agent.
+hermes config unset cron.model >/dev/null 2>&1 || true
+hermes config unset cron.model_provider >/dev/null 2>&1 || true
 hermes config set cron.wrap_response false
 
 echo "Enabling local reminder fast-path..."
@@ -63,7 +65,8 @@ echo "Hermes V1 hybrid configured."
 echo "  Main:       $MAIN_PROVIDER / $MAIN_MODEL"
 echo "  Local fast: $LOCAL_MODEL @ $LOCAL_BASE_URL"
 echo "  Fallbacks:  disabled"
+echo "  Cron model: per-job snapshot (no fleet override)"
 echo
-echo "Restart the native gateway after reviewing existing cron jobs:"
+echo "Inspect existing jobs, then restart the native gateway:"
 echo "  hermes cron list"
 echo "  hermes gateway restart"
