@@ -191,6 +191,8 @@ def _load_cron_skill_parts(job: dict, skill_names: list[str]) -> list[str]:
 
 _CRON_HINT = (
     "[IMPORTANT: You are running as a scheduled cron job. "
+    "LANGUAGE: Respond in Brazilian Portuguese (pt-BR) by default. "
+    "Only use another language when the stored job prompt explicitly asks for it. "
     "DELIVERY: Your final response will be automatically delivered "
     "to the user — do NOT use send_message or try to deliver "
     "the output yourself. Just produce your report/output as your "
