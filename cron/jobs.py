@@ -790,7 +790,7 @@ def _parse_bounded_weekdays(value: Optional[str]) -> List[int]:
     if text in {"weekend", "weekends"}:
         return [5, 6]
 
-    range_match = re.fullmatch(r"([a-z]+)\\s*(?:-|to|through)\\s*([a-z]+)", text)
+    range_match = re.fullmatch(r"([a-z]+)\s*(?:-|to|through)\s*([a-z]+)", text)
     if range_match:
         start = _BOUNDED_WEEKDAY_ALIASES.get(range_match.group(1))
         end = _BOUNDED_WEEKDAY_ALIASES.get(range_match.group(2))
@@ -822,8 +822,8 @@ def _parse_bounded_weekdays(value: Optional[str]) -> List[int]:
 def _parse_bounded_interval(schedule: str) -> Optional[Dict[str, Any]]:
     """Parse the canonical bounded form: every 2h between 08:00 and 18:00 on weekdays."""
     match = re.fullmatch(
-        r"every\\s+(.+?)\\s+(?:between|from)\\s+(.+?)\\s+(?:and|to)\\s+(.+?)"
-        r"(?:\\s+on\\s+(.+))?",
+        r"every\s+(.+?)\s+(?:between|from)\s+(.+?)\s+(?:and|to)\s+(.+?)"
+        r"(?:\s+on\s+(.+))?",
         schedule.strip(),
         flags=re.IGNORECASE,
     )
@@ -1964,13 +1964,13 @@ def create_job(
         # Titles identify the routine; they must not copy the complete user instruction.
         # Agent-created jobs should provide a semantic name. This fallback protects direct callers.
         semantic = re.sub(
-            r"^(?:please\\s+)?(?:remind me(?: to| that)?|remember to|notify me(?: to)?|"
-            r"me lembre(?: de| para)?|lembre-me(?: de| para)?|me avise(?: de| para)?)\\s+",
+            r"^(?:please\s+)?(?:remind me(?: to| that)?|remember to|notify me(?: to)?|"
+            r"me lembre(?: de| para)?|lembre-me(?: de| para)?|me avise(?: de| para)?)\s+",
             "", label_source.strip(), flags=re.IGNORECASE)
         semantic = re.split(
-            r"\\b(?:every|at|between|from|on|a cada|todo|toda|das|entre)\\b",
+            r"\b(?:every|at|between|from|on|a cada|todo|toda|das|entre)\b",
             semantic, maxsplit=1, flags=re.IGNORECASE)[0]
-        semantic = re.split(r"[.!?;\\n]", semantic, maxsplit=1)[0].strip(" ,:-")
+        semantic = re.split(r"[.!?;\n]", semantic, maxsplit=1)[0].strip(" ,:-")
         words = semantic.split()
         name = " ".join(words[:6]).strip() or "Reminder"
         name = name[:50].strip()
