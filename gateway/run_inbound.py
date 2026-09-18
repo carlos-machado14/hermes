@@ -1305,6 +1305,22 @@ class GatewayInboundMixin:
                     "please resend shortly."
                 )
 
+            # V1 hybrid fast-path: only explicit, deterministic reminder/routine actions are
+            # offered to the tiny local Ollama parser. It runs AFTER routing/auth/estop/lobby/drain
+            # gates and BEFORE the expensive main-agent claim. Any ambiguity/error returns None and
+            # falls through to the normal MiMo/main path.
+            try:
+                from gateway.local_fastpath import try_handle_local_fastpath
+
+                _local_result = await try_handle_local_fastpath(event, source)
+                if _local_result is not None:
+                    logger.info("Local fast-path handled message for session %s", _quick_key)
+                    return _local_result
+            except Exception:
+                logger.warning(
+                    "Local fast-path failed for session %s; falling back to main agent",
+                    _quick_key, exc_info=True)
+
         # Claim this session before any await: many awaits sit between here and _run_agent
         # registering the real AIAgent; without this sentinel a second message during any of them
         # passes the "already running" guard and spins up a duplicate agent for the same session.
