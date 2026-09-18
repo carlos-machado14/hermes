@@ -1029,11 +1029,11 @@ Jobs run in a fresh session with no current-chat context, so prompts must be sel
             "schedule": {
                 "type": "string",
                 "type": "string",
-                "description": "REQUIRED for create. Schedule forms: (1) recurring interval — '30m', 'every 2h', 'every hour' (EVERY 30 minutes / 2 hours / hour, forever by default); (2) explicit one-shot by duration — 'in 30m', 'in 2h' (fires ONCE that far from now; use this for 'remind me in N minutes' — do NOT hand-compute an absolute timestamp); (3) natural day/time — 'every monday 9am', 'weekdays at 9am', 'every day at 9am' (recurring weekly/daily); (4) cron syntax — '0 9 * * *' (daily 9am); (5) absolute one-shot — ISO timestamp '2026-06-01T09:00:00'."
+                "description": "REQUIRED for create. Schedule forms: (1) recurring interval — '30m', 'every 2h', 'every hour'; (2) bounded recurring interval — ALWAYS use canonical form 'every 2h between 08:00 and 18:00 on weekdays' or 'every 30m between 09:00 and 17:00 on monday,wednesday,friday' when the user asks for every X time inside a time window and/or selected days; (3) explicit one-shot by duration — 'in 30m', 'in 2h'; (4) natural day/time — 'every monday 9am', 'weekdays at 9am', 'every day at 9am'; (5) cron syntax — '0 9 * * *'; (6) absolute one-shot — ISO timestamp '2026-06-01T09:00:00'. Do not expand a bounded interval into multiple jobs."
             },
             "name": {
                 "type": "string",
-                "description": "Optional human-friendly name"
+                "description": "For create, ALWAYS provide a short semantic title (ideally 2-5 words) describing the routine, e.g. 'Drink water' or 'Study English'. Never copy the user's full instruction into the name. For update, omit unless renaming."
             },
             "repeat": {
                 "type": "integer",
