@@ -9,7 +9,7 @@ Hermes
    ↓
 Ollama on 127.0.0.1:11434
    ↓
-qwen3:4b-instruct
+qwen3:1.7b
    ↓
 conversation OR cronjob_manage
    ↓
@@ -31,11 +31,12 @@ http://127.0.0.1:11434/v1
 Both interactive chat and cron execution use:
 
 ```
-qwen3:4b-instruct
+qwen3:1.7b
 ```
 
-The starting context is 32768 tokens. This is a practical compromise for an 8 GB VPS; increase it
-only after measuring memory use.
+This is the CPU/RAM constrained V1 profile: one local model, one parallel request, and no cloud fallback.
+
+The starting context is 8192 tokens. This profile is intentionally conservative for an 8 GB, CPU-only VPS so Hermes and Ollama can coexist with headroom.
 
 ## Ollama service
 
@@ -43,7 +44,7 @@ Keep the service bound to loopback only and disable cloud features:
 
 ```
 OLLAMA_HOST=127.0.0.1:11434
-OLLAMA_CONTEXT_LENGTH=32768
+OLLAMA_CONTEXT_LENGTH=8192
 OLLAMA_NO_CLOUD=1
 OLLAMA_MAX_LOADED_MODELS=1
 OLLAMA_NUM_PARALLEL=1
@@ -52,11 +53,11 @@ OLLAMA_NUM_PARALLEL=1
 ## Hermes configuration
 
 ```bash
-hermes config set model.default qwen3:4b-instruct
+hermes config set model.default qwen3:1.7b
 hermes config set model.provider custom
 hermes config set model.base_url http://127.0.0.1:11434/v1
-hermes config set model.context_length 32768
-hermes config set cron.model qwen3:4b-instruct
+hermes config set model.context_length 8192
+hermes config set cron.model qwen3:1.7b
 hermes config set cron.model_provider custom
 hermes config set cron.wrap_response false
 hermes config set fallback_providers '[]'
