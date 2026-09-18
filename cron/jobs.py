@@ -767,6 +767,102 @@ def _interval_schedule(minutes: int) -> Dict[str, Any]:
     return {"kind": "interval", "minutes": minutes, "display": f"every {minutes}m"}
 
 
+_BOUNDED_WEEKDAY_ALIASES = {
+    "monday": 0, "mon": 0,
+    "tuesday": 1, "tue": 1, "tues": 1,
+    "wednesday": 2, "wed": 2,
+    "thursday": 3, "thu": 3, "thur": 3, "thurs": 3,
+    "friday": 4, "fri": 4,
+    "saturday": 5, "sat": 5,
+    "sunday": 6, "sun": 6,
+}
+
+
+def _parse_bounded_weekdays(value: Optional[str]) -> List[int]:
+    """Normalize a bounded-interval day selector to Python weekday numbers (Mon=0..Sun=6)."""
+    if not value:
+        return list(range(7))
+    text = value.strip().lower()
+    if text in {"daily", "everyday", "every day", "all days"}:
+        return list(range(7))
+    if text in {"weekday", "weekdays", "business days"}:
+        return [0, 1, 2, 3, 4]
+    if text in {"weekend", "weekends"}:
+        return [5, 6]
+
+    range_match = re.fullmatch(r"([a-z]+)\\s*(?:-|to|through)\\s*([a-z]+)", text)
+    if range_match:
+        start = _BOUNDED_WEEKDAY_ALIASES.get(range_match.group(1))
+        end = _BOUNDED_WEEKDAY_ALIASES.get(range_match.group(2))
+        if start is None or end is None:
+            raise ValueError(f"Invalid weekday range '{value}'.")
+        days = []
+        current = start
+        for _ in range(7):
+            days.append(current)
+            if current == end:
+                return days
+            current = (current + 1) % 7
+
+    tokens = [token for token in text.replace(" and ", ",").replace(" ", ",").split(",") if token]
+    days: List[int] = []
+    for token in tokens:
+        mapped = _BOUNDED_WEEKDAY_ALIASES.get(token)
+        if mapped is None:
+            raise ValueError(
+                f"Invalid weekday '{token}' in '{value}'. "
+                "Use e.g. weekdays, monday-friday, or monday,wednesday,friday.")
+        if mapped not in days:
+            days.append(mapped)
+    if not days:
+        raise ValueError("At least one weekday is required for a bounded interval.")
+    return sorted(days)
+
+
+def _parse_bounded_interval(schedule: str) -> Optional[Dict[str, Any]]:
+    """Parse the canonical bounded form: every 2h between 08:00 and 18:00 on weekdays."""
+    match = re.fullmatch(
+        r"every\\s+(.+?)\\s+(?:between|from)\\s+(.+?)\\s+(?:and|to)\\s+(.+?)"
+        r"(?:\\s+on\\s+(.+))?",
+        schedule.strip(),
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    duration_text, start_text, end_text, days_text = match.groups()
+    minutes = parse_duration(duration_text.strip())
+    start_clock = _parse_clock_time(start_text.strip())
+    end_clock = _parse_clock_time(end_text.strip())
+    if start_clock is None or end_clock is None:
+        raise ValueError(
+            f"Invalid bounded interval time in '{schedule}'. "
+            "Use e.g. 'every 2h between 08:00 and 18:00 on weekdays'.")
+
+    start_minute = start_clock[0] * 60 + start_clock[1]
+    end_minute = end_clock[0] * 60 + end_clock[1]
+    if end_minute < start_minute:
+        raise ValueError(
+            "Bounded intervals cannot cross midnight in this version; "
+            "the end time must be at or after the start time.")
+
+    weekdays = _parse_bounded_weekdays(days_text)
+    days_display = "daily" if weekdays == list(range(7)) else (
+        "weekdays" if weekdays == [0, 1, 2, 3, 4] else
+        ",".join(["mon", "tue", "wed", "thu", "fri", "sat", "sun"][day] for day in weekdays)
+    )
+    start_display = f"{start_clock[0]:02d}:{start_clock[1]:02d}"
+    end_display = f"{end_clock[0]:02d}:{end_clock[1]:02d}"
+    return {
+        "kind": "bounded_interval",
+        "minutes": minutes,
+        "start_time": start_display,
+        "end_time": end_display,
+        "weekdays": weekdays,
+        "display": f"every {minutes}m, {start_display}-{end_display}, {days_display}",
+    }
+
+
 def parse_schedule(schedule: str) -> Dict[str, Any]:
     """Parse a schedule string into ``{"kind": "once"|"interval"|"cron", ...}`` with ``run_at`` /
     ``minutes`` / ``expr``. "30m" and "every 30m" are recurring intervals; "every monday 9am" and
@@ -774,6 +870,10 @@ def parse_schedule(schedule: str) -> Dict[str, Any]:
     schedule = schedule.strip()
     original = schedule
     schedule_lower = schedule.lower()
+
+    bounded = _parse_bounded_interval(schedule)
+    if bounded is not None:
+        return bounded
 
     # Natural day/time phrase → cron ("every monday 9am", or sans prefix "weekdays at 9am");
     # any other "every X" → recurring interval.
@@ -836,6 +936,7 @@ def parse_schedule(schedule: str) -> Dict[str, Any]:
     raise ValueError(
         f"Invalid schedule '{original}'. Use:\n"
         f"  - Interval: '30m', 'every 30m', 'every 2h' (recurring)\n"
+        f"  - Bounded interval: 'every 2h between 08:00 and 18:00 on weekdays'\n"
         f"  - One-shot delay: 'in 30m', 'in 2h' (fires once)\n"
         f"  - Weekly/daily: 'every monday 9am', 'weekdays at 9am' (recurring)\n"
         f"  - Cron: '0 9 * * *' (cron expression)\n"
@@ -982,7 +1083,7 @@ def _schedule_cadence_seconds(schedule: Dict[str, Any]) -> Optional[float]:
     if not isinstance(schedule, dict):
         return None
     kind = schedule.get("kind")
-    if kind == "interval":
+    if kind in {"interval", "bounded_interval"}:
         minutes = schedule.get("minutes")
         try:
             return float(minutes) * 60.0 if minutes else None
@@ -1153,6 +1254,40 @@ def compute_next_run(schedule: Dict[str, Any], last_run_at: Optional[str] = None
         # Add in UTC so an interval keeps its duration when the profile's UTC offset changes.
         next_run = base_time.astimezone(timezone.utc) + timedelta(minutes=minutes)
         return next_run.astimezone(base_time.tzinfo).isoformat()
+    if kind == "bounded_interval":
+        try:
+            minutes = int(schedule.get("minutes"))
+            start_hour, start_minute = map(int, str(schedule["start_time"]).split(":"))
+            end_hour, end_minute = map(int, str(schedule["end_time"]).split(":"))
+            weekdays = {int(day) for day in schedule.get("weekdays", range(7))}
+        except (TypeError, ValueError, KeyError):
+            return None
+        if minutes <= 0 or not weekdays:
+            return None
+
+        zone = get_timezone() or base_time.tzinfo
+        base_local = base_time.astimezone(zone)
+        for day_offset in range(8):
+            day = base_local + timedelta(days=day_offset)
+            if day.weekday() not in weekdays:
+                continue
+            window_start = day.replace(
+                hour=start_hour, minute=start_minute, second=0, microsecond=0)
+            window_end = day.replace(
+                hour=end_hour, minute=end_minute, second=0, microsecond=0)
+            if window_end < window_start:
+                return None
+
+            if base_local < window_start:
+                candidate = window_start
+            else:
+                elapsed_minutes = int((base_local - window_start).total_seconds() // 60)
+                steps = (elapsed_minutes // minutes) + 1
+                candidate = window_start + timedelta(minutes=steps * minutes)
+
+            if candidate <= window_end and candidate > base_local:
+                return candidate.isoformat()
+        return None
     if kind == "cron":
         expr = schedule.get("expr")
         if not expr:
@@ -1823,7 +1958,22 @@ def create_job(
         or (f["script"] if f["no_agent"] else None)
         or "cron job"
     )
-    name = name or label_source[:50].strip()
+    if name:
+        name = name.strip()[:50]
+    else:
+        # Titles identify the routine; they must not copy the complete user instruction.
+        # Agent-created jobs should provide a semantic name. This fallback protects direct callers.
+        semantic = re.sub(
+            r"^(?:please\\s+)?(?:remind me(?: to| that)?|remember to|notify me(?: to)?|"
+            r"me lembre(?: de| para)?|lembre-me(?: de| para)?|me avise(?: de| para)?)\\s+",
+            "", label_source.strip(), flags=re.IGNORECASE)
+        semantic = re.split(
+            r"\\b(?:every|at|between|from|on|a cada|todo|toda|das|entre)\\b",
+            semantic, maxsplit=1, flags=re.IGNORECASE)[0]
+        semantic = re.split(r"[.!?;\\n]", semantic, maxsplit=1)[0].strip(" ,:-")
+        words = semantic.split()
+        name = " ".join(words[:6]).strip() or "Reminder"
+        name = name[:50].strip()
     provider_snapshot, model_snapshot = _compute_provider_model_snapshots(
         provider=f["provider"], model=f["model"], base_url=f["base_url"], no_agent=f["no_agent"])
     next_run_at = _next_run_or_reject_past_oneshot(parsed_schedule, name, schedule, "")
