@@ -1959,8 +1959,17 @@ def create_job(
         or "cron job"
     )
     if name:
-        name = name.strip()[:50]
-    else:
+        candidate_name = name.strip()
+        # Do not accept the user instruction itself as the title, even if the model sends it.
+        # Very long sentence-like names are also treated as missing and summarized below.
+        if (
+            (prompt_text and candidate_name.casefold() == prompt_text.casefold())
+            or len(candidate_name.split()) > 8
+        ):
+            name = None
+        else:
+            name = candidate_name[:50]
+    if not name:
         # Titles identify the routine; they must not copy the complete user instruction.
         # Agent-created jobs should provide a semantic name. This fallback protects direct callers.
         semantic = re.sub(
