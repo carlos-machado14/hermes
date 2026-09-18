@@ -12,9 +12,6 @@ model:
 
 fallback_providers: []
 
-agent:
-  reasoning_effort: none
-
 timezone: America/Sao_Paulo
 
 cron:
