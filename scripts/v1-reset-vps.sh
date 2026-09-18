@@ -38,6 +38,7 @@ if [[ -d "$HERMES_HOME" ]]; then
 
   [[ -f "$HERMES_HOME/config.yaml" ]] && cp -a "$HERMES_HOME/config.yaml" "$BACKUP_DIR/config.yaml.full"
   [[ -f "$HERMES_HOME/.env" ]] && cp -a "$HERMES_HOME/.env" "$BACKUP_DIR/env.full"
+  [[ -f "$HERMES_HOME/.env" ]] && cp -a "$HERMES_HOME/.env" "$BACKUP_DIR/preserved-full.env"
 
   if command -v hermes >/dev/null 2>&1; then
     echo "==> Exporting the only active config sections V1 will restore"
@@ -72,6 +73,14 @@ rm -rf "$HERMES_HOME"
 mkdir -p "$HERMES_HOME"
 chmod 700 "$HERMES_HOME"
 
+# Restore the complete env exactly as it was so user-managed secrets are never lost.
+# Provider/model selection is controlled by config.yaml in V1, so old credentials can remain
+# stored here without being active.
+if [[ -f "$BACKUP_DIR/preserved-full.env" ]]; then
+  cp -a "$BACKUP_DIR/preserved-full.env" "$HERMES_HOME/.env"
+  chmod 600 "$HERMES_HOME/.env"
+fi
+
 cat > "$BACKUP_ROOT/LATEST" <<EOF
 $BACKUP_DIR
 EOF
@@ -79,5 +88,5 @@ EOF
 echo
 echo "Reset complete."
 echo "Full backup: $BACKUP_DIR/hermes-home-full.tar.gz"
-echo "Preserved config: network.json, telegram.json, preserved.env"
+echo "Preserved config: network.json, telegram.json, preserved.env, preserved-full.env"
 echo "Next: follow V1_LOCAL.md from the preserved ~/hermes checkout"

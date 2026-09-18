@@ -68,13 +68,13 @@ Before deleting the old Hermes state, preserve only:
 
 - `network` section from `~/.hermes/config.yaml`;
 - `telegram` section from `~/.hermes/config.yaml`;
-- `TELEGRAM_*` variables from `~/.hermes/.env`;
-- `GATEWAY_*` and `HERMES_GATEWAY_*` variables from `~/.hermes/.env`.
+- the complete `~/.hermes/.env` file, including user-managed secrets;
+- `TELEGRAM_*`, `GATEWAY_*`, and `HERMES_GATEWAY_*` are additionally exported separately for inspection.
 
 Do not migrate old cron jobs, plugins, hooks, model/router configuration, memory, provider fallbacks,
 or legacy repositories into V1.
 
-Always make a full backup of `~/.hermes` outside that directory before cleanup.
+Always make a full backup of `~/.hermes` outside that directory before cleanup. The reset script restores the full `.env` after cleanup so custom secrets are preserved. Old provider credentials may remain stored there, but V1 still forces the active model/provider to the local Ollama configuration and keeps `fallback_providers: []`.
 
 ## Acceptance test
 
