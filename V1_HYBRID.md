@@ -82,8 +82,11 @@ system prompt or the web/browser schemas.
 Static reminders created by the fast-path use `no_agent=True` with a static prompt. At fire time
 the native Hermes scheduler delivers that prompt verbatim. No cloud or local LLM is called.
 
-Dynamic cron jobs remain agent-backed and use the configured cron model, MiMo-V2.5. This is required
-for web research, current news, jobs, company research, analysis, and other tool-driven work.
+Dynamic cron jobs remain agent-backed. V1 deliberately leaves the fleet-wide `cron.model` and
+`cron.model_provider` overrides unset: existing jobs keep their creation-time model snapshots,
+while newly-created intelligent jobs snapshot the current main model (MiMo-V2.5). This avoids
+silently moving old simple jobs onto paid inference while still giving new web/research routines
+the capable model.
 
 ## Configuration
 
