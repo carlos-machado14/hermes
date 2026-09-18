@@ -121,7 +121,7 @@ def _failure_streak_nudge(job: dict) -> str:
     BEFORE mark_job_run records this run, hence stored ``failure_streak`` + 1. Threshold:
     ``cron.failure_nudge_threshold`` (default 3, 0 disables)."""
     schedule_kind = (job.get("schedule") or {}).get("kind")
-    if schedule_kind not in {"cron", "interval"}:
+    if schedule_kind not in {"cron", "interval", "bounded_interval"}:
         return ""
     try:
         cfg = load_config() or {}
@@ -665,7 +665,7 @@ def _job_interval_minutes(job: dict) -> Optional[float]:
             schedule = parse_schedule(schedule) or {}
         if isinstance(schedule, dict):
             kind = schedule.get("kind")
-            if kind == "interval":
+            if kind in {"interval", "bounded_interval"}:
                 minutes = schedule.get("minutes")
                 return float(minutes) if minutes else None
             if kind == "cron":
