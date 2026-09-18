@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL="qwen3:1.7b"
+MODEL="qwen3.5:2b-q4_K_M"
 OLLAMA_URL="http://127.0.0.1:11434/v1"
-CONTEXT_LENGTH="8192"
+CONTEXT_LENGTH="64000"
 
 if ! command -v hermes >/dev/null 2>&1; then
   echo "Hermes is not installed or not on PATH."
