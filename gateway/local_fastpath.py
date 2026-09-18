@@ -71,6 +71,24 @@ def _is_list_request(text: str) -> bool:
     )
 
 
+def _expected_action(text: str) -> Optional[str]:
+    """Deterministic action gate; the local model may extract fields, never choose authority."""
+    folded = _fold(text)
+    if _is_explicit_reminder(text):
+        return "create"
+    if not any(word in folded for word in _ROUTINE_WORDS):
+        return None
+    if any(marker in folded for marker in ("liste", "listar", "mostre", "mostrar", "quais")):
+        return "list"
+    if any(marker in folded for marker in ("pause", "pausar")):
+        return "pause"
+    if any(marker in folded for marker in ("retome", "retomar", "resume")):
+        return "resume"
+    if any(marker in folded for marker in ("remova", "remover", "apague", "apagar", "exclua", "excluir")):
+        return "remove"
+    return None
+
+
 def _needs_main_agent(text: str) -> bool:
     """True when a routine request itself asks Hermes to perform intelligent/dynamic work."""
     folded = _fold(text)
@@ -284,8 +302,14 @@ async def try_handle_local_fastpath(event: Any, source: Any) -> Optional[str]:
     except Exception:
         timezone_name = "America/Sao_Paulo"
 
+    expected_action = _expected_action(text)
+    if expected_action is None:
+        return None
     parsed = await asyncio.to_thread(_parse_local_json, text, cfg, timezone_name)
-    if not parsed:
+    if not parsed or str(parsed.get("action") or "").strip().lower() != expected_action:
+        logger.info(
+            "local_fastpath: parser action mismatch (expected=%s, got=%s); falling back to main",
+            expected_action, parsed.get("action") if parsed else None)
         return None
     try:
         return await asyncio.to_thread(_handle_action, parsed, source)
