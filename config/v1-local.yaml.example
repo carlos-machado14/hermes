@@ -1,0 +1,15 @@
+# Hermes V1 local-only profile
+# Copy the relevant keys into ~/.hermes/config.yaml or apply them with hermes config set.
+
+model:
+  default: qwen3:4b-instruct
+  provider: custom
+  base_url: http://127.0.0.1:11434/v1
+  context_length: 32768
+
+cron:
+  model: qwen3:4b-instruct
+  model_provider: custom
+  wrap_response: false
+
+fallback_providers: []
