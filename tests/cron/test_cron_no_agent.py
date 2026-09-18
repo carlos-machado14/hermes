@@ -46,11 +46,25 @@ def hermes_env(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_create_job_no_agent_requires_script(hermes_env):
+def test_create_job_no_agent_requires_script_or_prompt(hermes_env):
     from cron.jobs import create_job
 
-    with pytest.raises(ValueError, match="no_agent=True requires a script"):
+    with pytest.raises(ValueError, match="no_agent=True requires a script or a non-empty prompt"):
         create_job(prompt=None, schedule="every 5m", no_agent=True)
+
+
+def test_create_job_no_agent_accepts_static_prompt(hermes_env):
+    from cron.jobs import create_job
+
+    job = create_job(
+        prompt="Lembrete: beber água.",
+        schedule="in 30m",
+        no_agent=True,
+        deliver="local",
+    )
+    assert job["no_agent"] is True
+    assert job["script"] is None
+    assert job["prompt"] == "Lembrete: beber água."
 
 
 def test_update_job_roundtrips_no_agent_flag(hermes_env):
@@ -74,19 +88,59 @@ def test_update_job_roundtrips_no_agent_flag(hermes_env):
 # ---------------------------------------------------------------------------
 
 
-def test_cronjob_tool_create_no_agent_without_script_errors(hermes_env):
+def test_cronjob_tool_create_no_agent_without_payload_errors(hermes_env):
     from tools.cronjob_tools import cronjob
 
     result = json.loads(
         cronjob(action="create", schedule="every 5m", no_agent=True, deliver="local")
     )
     assert result.get("success") is False
-    assert "no_agent=True requires a script" in result.get("error", "")
+    assert "script or a non-empty prompt" in result.get("error", "")
+
+
+def test_cronjob_tool_create_static_no_agent_prompt_succeeds(hermes_env):
+    from tools.cronjob_tools import cronjob
+
+    result = json.loads(
+        cronjob(
+            action="create",
+            schedule="in 30m",
+            prompt="Lembrete: revisar tarefas.",
+            name="Revisar tarefas",
+            no_agent=True,
+            deliver="local",
+        )
+    )
+    assert result.get("success") is True
+    assert result["job"]["no_agent"] is True
+    assert result["job"]["prompt"] == "Lembrete: revisar tarefas."
 
 
 # ---------------------------------------------------------------------------
 # scheduler.run_job: short-circuit behavior
 # ---------------------------------------------------------------------------
+
+
+def test_run_job_no_agent_static_prompt_skips_agent_and_delivers_verbatim(hermes_env):
+    """Static reminders must execute without importing/constructing AIAgent."""
+    from cron.jobs import create_job
+    from cron.scheduler import run_job
+
+    job = create_job(
+        prompt="Lembrete: beber água.",
+        schedule="in 30m",
+        no_agent=True,
+        deliver="local",
+        name="Beber água",
+    )
+    with patch.dict("sys.modules", {"run_agent": None}):
+        success, doc, final_response, error = run_job(job)
+
+    assert success is True
+    assert error is None
+    assert final_response == "Lembrete: beber água."
+    assert "no_agent (static)" in doc
+    assert "Lembrete: beber água." in doc
 
 
 def test_run_job_no_agent_success_returns_script_stdout(hermes_env):
