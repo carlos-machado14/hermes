@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import unicodedata
 import urllib.error
 import urllib.request
@@ -27,6 +28,10 @@ _CREATE_MARKERS = (
     "me avise", "me avisa", "me avisar", "me cobre",
     "crie um lembrete", "criar um lembrete", "crie uma rotina",
     "criar uma rotina", "agende", "programe",
+)
+_AUTONOMOUS_ROUTINE_CREATE_MARKERS = (
+    "crie uma rotina", "criar uma rotina",
+    "agende uma rotina", "programe uma rotina",
 )
 _ROUTINE_WORDS = ("rotina", "rotinas", "lembrete", "lembretes", "cron", "crons")
 _MANAGE_MARKERS = (
@@ -54,19 +59,34 @@ def _is_explicit_reminder(text: str) -> bool:
     return any(marker in folded for marker in _CREATE_MARKERS)
 
 
+def _is_list_request(text: str) -> bool:
+    """Recognize an actual request to list routines, not incidental prose like 'para as quais'."""
+    folded = _fold(text)
+    if not any(re.search(rf"\b{re.escape(word)}\b", folded) for word in _ROUTINE_WORDS):
+        return False
+
+    # Strong imperative list verbs may appear anywhere.
+    if re.search(r"\b(?:liste|listar|mostre|mostrar)\b", folded):
+        return True
+
+    # "quais" is only list intent when it opens the request/question.  This avoids the
+    # false positive from phrases such as "empresas para as quais não encontrei site".
+    return bool(re.match(r"^\s*quais\b", folded))
+
+
 def _is_management_candidate(text: str) -> bool:
     folded = _fold(text)
+    if _is_list_request(text):
+        return True
     return (
-        any(word in folded for word in _ROUTINE_WORDS)
-        and any(marker in folded for marker in _MANAGE_MARKERS)
-    )
-
-
-def _is_list_request(text: str) -> bool:
-    folded = _fold(text)
-    return (
-        any(word in folded for word in _ROUTINE_WORDS)
-        and any(marker in folded for marker in ("liste", "listar", "mostre", "mostrar", "quais"))
+        any(re.search(rf"\b{re.escape(word)}\b", folded) for word in _ROUTINE_WORDS)
+        and any(
+            re.search(rf"\b{re.escape(marker)}\b", folded)
+            for marker in (
+                "pause", "pausar", "retome", "retomar", "resume",
+                "remova", "remover", "apague", "apagar", "exclua", "excluir",
+            )
+        )
     )
 
 
@@ -75,9 +95,9 @@ def _expected_action(text: str) -> Optional[str]:
     folded = _fold(text)
     if _is_explicit_reminder(text):
         return "create"
-    if not any(word in folded for word in _ROUTINE_WORDS):
+    if not any(re.search(rf"\b{re.escape(word)}\b", folded) for word in _ROUTINE_WORDS):
         return None
-    if any(marker in folded for marker in ("liste", "listar", "mostre", "mostrar", "quais")):
+    if _is_list_request(text):
         return "list"
     if any(marker in folded for marker in ("pause", "pausar")):
         return "pause"
@@ -93,8 +113,12 @@ def _needs_main_agent(text: str) -> bool:
     folded = _fold(text)
     if not any(marker in folded for marker in _SMART_WORK_MARKERS):
         return False
-    # "me lembre de pesquisar vagas" is a static reminder.  "crie uma rotina que
-    # pesquise vagas e me mande..." is autonomous work and belongs on MiMo.
+    # Static reminders can mention a future human action ("me lembre de pesquisar vagas").
+    # But an explicit ROUTINE creation that also asks for research/web/analysis is autonomous
+    # work and must bypass the local parser entirely.
+    if any(marker in folded for marker in _AUTONOMOUS_ROUTINE_CREATE_MARKERS):
+        return True
+
     if _is_explicit_reminder(text):
         autonomous_shapes = (
             "rotina que ", "rotina para pesquisar", "rotina para buscar",
@@ -285,8 +309,10 @@ async def try_handle_local_fastpath(event: Any, source: Any) -> Optional[str]:
     if not is_fastpath_candidate(text):
         return None
 
-    # Listing is deterministic and needs no model at all.
-    if _is_list_request(text):
+    # Resolve the deterministic intent once. Create has priority over incidental words in
+    # the request body, and only a true list intent can take the zero-model list shortcut.
+    expected_action = _expected_action(text)
+    if expected_action == "list":
         try:
             return await asyncio.to_thread(_format_list)
         except Exception:
@@ -301,7 +327,6 @@ async def try_handle_local_fastpath(event: Any, source: Any) -> Optional[str]:
     except Exception:
         timezone_name = "America/Sao_Paulo"
 
-    expected_action = _expected_action(text)
     if expected_action is None:
         return None
     parsed = await asyncio.to_thread(_parse_local_json, text, cfg, timezone_name)
