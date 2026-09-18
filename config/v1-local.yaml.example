@@ -2,13 +2,13 @@
 # Copy the relevant keys into ~/.hermes/config.yaml or apply them with hermes config set.
 
 model:
-  default: qwen3:1.7b
+  default: qwen3.5:2b-q4_K_M
   provider: custom
   base_url: http://127.0.0.1:11434/v1
-  context_length: 8192
+  context_length: 64000
 
 cron:
-  model: qwen3:1.7b
+  model: qwen3.5:2b-q4_K_M
   model_provider: custom
   wrap_response: false
 
