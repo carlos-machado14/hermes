@@ -18,9 +18,8 @@ agent:
 timezone: America/Sao_Paulo
 
 cron:
-  # Agent-backed/dynamic cron jobs (research, web, analysis) use the capable main model.
-  model: mimo-v2.5
-  model_provider: opencode-go
+  # No fleet-wide model override. Existing jobs keep their creation snapshot; new agent-backed
+  # jobs snapshot the current main model (MiMo). Static local reminders are no_agent.
   wrap_response: false
 
 local_fastpath:
