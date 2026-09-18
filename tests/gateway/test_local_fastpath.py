@@ -26,6 +26,16 @@ def test_autonomous_research_routine_stays_on_main_agent():
     ) is False
 
 
+def test_named_research_routine_with_relative_quais_stays_on_main_agent():
+    text = (
+        'Crie uma rotina chamada "Prospecção Odontológica Curitiba" para rodar todos os dias às 08:00. '
+        'Encontre 3 empresas do ramo odontológico em Curitiba/PR para as quais você não consiga '
+        'encontrar um site oficial próprio. Pesquise contatos, imagens e faça uma análise comercial.'
+    )
+    assert lf._is_list_request(text) is False
+    assert lf.is_fastpath_candidate(text) is False
+
+
 def test_static_reminder_about_research_can_stay_local():
     assert lf.is_fastpath_candidate(
         "Me lembre amanhã às 10h de pesquisar vagas Flutter"
@@ -34,6 +44,15 @@ def test_static_reminder_about_research_can_stay_local():
 
 def test_list_request_does_not_need_local_llm():
     assert lf._is_list_request("Quais são minhas rotinas?") is True
+    assert lf._is_list_request("Liste minhas rotinas") is True
+
+
+def test_incidental_quais_does_not_turn_create_into_list():
+    text = (
+        "Crie uma rotina para me avisar sobre empresas para as quais ainda não encontrei site."
+    )
+    assert lf._is_list_request(text) is False
+    assert lf._expected_action(text) == "create"
 
 
 def test_create_action_uses_static_no_agent_cron(monkeypatch):
