@@ -24,6 +24,15 @@ DEFAULT_CONFIG = {
     "fallback_providers": [],
     "credential_pool_strategies": {},
     "toolsets": ["hermes-cli"],
+    # V1 hybrid local fast-path: explicit reminder/routine actions may be parsed by a tiny
+    # loopback Ollama model before the main cloud agent is constructed. Disabled by default so
+    # upstream/general installs keep the normal single-model behavior.
+    "local_fastpath": {
+        "enabled": False,
+        "model": "qwen3.5:2b-q4_K_M",
+        "base_url": "http://127.0.0.1:11434",
+        "timeout_seconds": 15,
+    },
     # journal_mode: SQLite journal mode for every Hermes DB. "wal" default; use "delete" on
     # weak-fsync/shared filesystems where WAL is not crash-safe (macOS virtiofs, NFS, SMB).
     "database": {

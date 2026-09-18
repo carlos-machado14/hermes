@@ -84,11 +84,15 @@ def _mode_guidance_notes(job: Dict[str, Any], user_deliver: Optional[str]) -> Li
             "baseline. The source must emit STABLE output (no timestamps, no "
             "random ordering) or every tick will look changed.")
     if job.get("no_agent"):
-        notes.append(
-            "no_agent mode: stdout is delivered verbatim; EMPTY stdout sends "
-            "nothing at all (watchdog pattern — script should stay quiet when "
-            "there is nothing to report). Non-zero exit or timeout sends an "
-            "error alert. prompt/skills are ignored.")
+        if job.get("script"):
+            notes.append(
+                "no_agent mode: script stdout is delivered verbatim; EMPTY stdout sends "
+                "nothing at all (watchdog pattern — script should stay quiet when "
+                "there is nothing to report). Non-zero exit or timeout sends an error alert.")
+        else:
+            notes.append(
+                "no_agent static-reminder mode: the prompt is delivered verbatim on schedule. "
+                "No LLM/provider call is made.")
     _deliver = (user_deliver or "").strip().lower()
     if _deliver:
         if "all" in _deliver.split(","):

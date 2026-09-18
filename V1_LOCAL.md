@@ -1,5 +1,10 @@
 # Hermes V1 — local-only
 
+> **Legacy profile:** this was the first CPU-only V1 experiment. The active/recommended
+> architecture is now [V1_HYBRID.md](V1_HYBRID.md): MiMo-V2.5 for general intelligence and a
+> tiny local Qwen fast-path for explicit reminder/routine actions. Keep this document only as
+> rollback/history.
+
 V1 is intentionally small and local:
 
 ```

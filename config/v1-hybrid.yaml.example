@@ -1,0 +1,29 @@
+# Hermes/Freud V1 hybrid profile
+#
+# Main intelligence: OpenCode Go / MiMo-V2.5
+# Local fast-path: Ollama / Qwen3.5 2B, only for explicit simple reminder/routine actions
+# Simple reminders execute as native no-agent cron jobs (zero LLM calls at fire time).
+
+model:
+  default: mimo-v2.5
+  provider: opencode-go
+  base_url: https://opencode.ai/zen/go/v1
+  api_mode: chat_completions
+
+fallback_providers: []
+
+agent:
+  reasoning_effort: none
+
+timezone: America/Sao_Paulo
+
+cron:
+  # No fleet-wide model override. Existing jobs keep their creation snapshot; new agent-backed
+  # jobs snapshot the current main model (MiMo). Static local reminders are no_agent.
+  wrap_response: false
+
+local_fastpath:
+  enabled: true
+  model: qwen3.5:2b-q4_K_M
+  base_url: http://127.0.0.1:11434
+  timeout_seconds: 15

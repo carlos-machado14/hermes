@@ -564,15 +564,14 @@ def _action_create(a: Dict[str, Any]) -> str:
         return tool_error("schedule is required for create", success=False)
     canonical_skills = _canonical_skills(a["skill"], a["skills"])
     _no_agent = bool(a["no_agent"])
-    # no_agent=True -> the script IS the job (prompt/skills optional); else prompt or skills.
+    # no_agent=True -> deterministic execution with no LLM. A script delivers stdout;
+    # without a script, a non-empty prompt is delivered verbatim as a static reminder.
     if _no_agent:
-        if not script:
+        if not script and not str(prompt or "").strip():
             return tool_error(
-                "create with no_agent=True requires a script — "
-                "the script is the job. In no_agent mode the LLM is "
-                "skipped entirely: prompt and skills are ignored, "
-                "non-empty stdout is delivered verbatim, empty stdout "
-                "sends nothing (watchdog pattern), and a non-zero exit or timeout sends an error alert.",
+                "create with no_agent=True requires a script or a non-empty prompt. "
+                "With a script, stdout is delivered verbatim; without a script, "
+                "the prompt itself is delivered verbatim. No LLM/provider call is made.",
                 success=False)
     elif not prompt and not canonical_skills:
         return tool_error("create requires either prompt or at least one skill", success=False)
@@ -815,12 +814,16 @@ def _update_run_fields(job: Dict[str, Any], a: Dict[str, Any], updates: Dict[str
         # Empty string clears; otherwise update_job() validates/normalizes.
         updates["workdir"] = _normalize_optional_job_value(a["workdir"]) or None
     if a["no_agent"] is not None:
-        # Flipping to True needs a script on the job or in this same update.
+        # Flipping to True needs either deterministic script output or a static prompt.
         target_no_agent = bool(a["no_agent"])
-        if target_no_agent and not _pick(updates, job, "script"):
+        if (
+            target_no_agent
+            and not _pick(updates, job, "script")
+            and not str(_pick(updates, job, "prompt") or "").strip()
+        ):
             return (
-                "Cannot set no_agent=True on a job without a script. "
-                "Set `script` in the same update, or on the job first.")
+                "Cannot set no_agent=True on a job without a script or prompt. "
+                "Set `script` or a static `prompt` in the same update, or on the job first.")
         updates["no_agent"] = target_no_agent
     if a["repeat"] is not None:
         # Shared chokepoint coerces string forms ('forever'/'once'/'3') and 0/negative.
@@ -1063,7 +1066,7 @@ Jobs run in a fresh session with no current-chat context, so prompts must be sel
             "no_agent": {
                 "type": "boolean",
                 "default": False,
-                "description": "True = no LLM: the scheduler runs `script` (required) on schedule and delivers its stdout verbatim; empty stdout sends nothing (watchdog pattern). Use for script-only pings with fixed output; keep False for anything needing reasoning."
+                "description": "True = no LLM. With `script`, deliver stdout verbatim (empty stdout sends nothing). Without a script, deliver the non-empty `prompt` verbatim — ideal for static reminders. Keep False for anything needing reasoning, research, web access, or dynamic content."
             },
             "context_from": {
                 "type": "array",

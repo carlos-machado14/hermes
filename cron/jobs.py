@@ -457,14 +457,14 @@ EMPTY_PAYLOAD_ERROR = (
 )
 
 NO_AGENT_WITHOUT_SCRIPT_ERROR = (
-    "no_agent=True requires a script — with no agent and no script "
-    "there is nothing for the job to run."
+    "no_agent=True requires a script or a non-empty prompt — without either "
+    "there is nothing for the job to deliver."
 )
 
 
 def job_payload_is_empty(job: Dict[str, Any]) -> bool:
     """True when a job record has nothing runnable (blank prompt, no script, no skills) AND at
-    least one payload field is explicitly present. ``no_agent`` already requires a script."""
+    least one payload field is explicitly present. A no-agent job may use a prompt as static output."""
     if _coerce_job_text(job.get("prompt")).strip() or _coerce_job_text(job.get("script")).strip():
         return False
     if _normalize_skill_list(job.get("skill"), job.get("skills")):
@@ -1850,6 +1850,7 @@ def _validate_job_mode_invariants(
     monitor_url: Optional[str],
     no_agent: bool,
     script: Optional[str],
+    prompt: Optional[str] = None,
 ) -> None:
     """Execution-mode invariants shared by create_job and update_job (no bypass via the update
     door)."""
@@ -1862,7 +1863,7 @@ def _validate_job_mode_invariants(
             "monitor_script/monitor_url cannot be combined with no_agent=True — "
             "the whole point of a monitor job is to suppress or wake the AGENT "
             "based on source changes. Use a plain no_agent script job instead.")
-    if no_agent and not script:
+    if no_agent and not script and not _coerce_job_text(prompt).strip():
         raise ValueError(NO_AGENT_WITHOUT_SCRIPT_ERROR)
 
 
@@ -1916,7 +1917,8 @@ def create_job(
 
     deliver defaults to "origin" when ``origin`` is given, else "local"; repeat None = forever.
     script: stdout is injected as prompt context, or with ``no_agent=True`` IS the job (stdout
-    delivered verbatim, requires ``script``). context_from: job id(s) whose latest output is
+    delivered verbatim). A no-agent job without a script delivers its non-empty prompt verbatim.
+    context_from: job id(s) whose latest output is
     injected. workdir: absolute cwd for tools/scripts. monitor_script/monitor_url: cheap monitor
     source run FIRST each tick; unchanged output suppresses the agent run (mutually exclusive,
     incompatible with ``no_agent``). reasoning_effort: per-job pin; capability NOT validated."""
@@ -1944,8 +1946,9 @@ def create_job(
     normalized_attach = attach_to_session if isinstance(attach_to_session, bool) else None
     normalized_reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
 
-    _validate_job_mode_invariants(f["monitor_script"], f["monitor_url"], f["no_agent"], f["script"])
     prompt_text = _coerce_job_text(prompt).strip()
+    _validate_job_mode_invariants(
+        f["monitor_script"], f["monitor_url"], f["no_agent"], f["script"], prompt_text)
     if not prompt_text and not f["script"] and not normalized_skills:
         raise ValueError(EMPTY_PAYLOAD_ERROR)
     # Reject gateway-lifecycle commands (respawn loops) here, not just in the CLI: covers the tool.
@@ -2203,12 +2206,13 @@ def update_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]
         updated = _apply_skill_fields({**job, **updates})
         _reject_terminal_activation(job, updated, job_id)
         # Re-check on the MERGED record; scoped to changed fields so legacy records keep loading.
-        if {"monitor_script", "monitor_url", "no_agent", "script"}.intersection(updates):
+        if {"monitor_script", "monitor_url", "no_agent", "script", "prompt"}.intersection(updates):
             _validate_job_mode_invariants(
                 updated.get("monitor_script") or None,
                 updated.get("monitor_url") or None,
                 bool(updated.get("no_agent")),
-                _normalize_job_optional_text(updated.get("script")))
+                _normalize_job_optional_text(updated.get("script")),
+                _coerce_job_text(updated.get("prompt")).strip() or None)
         if any(k in updates for k in _PAYLOAD_FIELDS) and job_payload_is_empty(updated):
             raise ValueError(EMPTY_PAYLOAD_ERROR)
         inference_fields_changed = bool(
