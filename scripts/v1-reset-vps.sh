@@ -80,4 +80,4 @@ echo
 echo "Reset complete."
 echo "Full backup: $BACKUP_DIR/hermes-home-full.tar.gz"
 echo "Preserved config: network.json, telegram.json, preserved.env"
-echo "Next: bash scripts/v1-setup-local.sh"
+echo "Next: follow V1_LOCAL.md from the preserved ~/hermes checkout"
