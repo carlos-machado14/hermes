@@ -31,9 +31,9 @@ def test_inactivity_timeout_is_not_reported_as_provider_timeout():
         "(limit 600s) — last activity: terminal command running (30s elapsed)"
     )
     msg = _summarize_cron_failure_for_delivery(job, error)
-    assert "did not respond in time" not in msg
-    assert "backup provider" not in msg.lower()
-    assert "stalled" in msg.lower()
+    assert "não respondeu a tempo" not in msg
+    assert "provedor de backup" not in msg.lower()
+    assert "travou" in msg.lower()
     assert "Daily Repo Sweep" in msg
 
 
@@ -43,9 +43,9 @@ def test_genuine_provider_timeout_with_no_fallback_configured(monkeypatch):
     job = {"name": "CI Autofix Poller", "id": "f7fe78574bda"}
     error = "Request timed out."
     msg = _summarize_cron_failure_for_delivery(job, error)
-    assert "did not respond in time" in msg
-    assert "No backup provider is configured" in msg
-    assert "succeeded either" not in msg
+    assert "não respondeu a tempo" in msg
+    assert "No provedor de backup is configured" in msg
+    assert "funcionou" not in msg
 
 
 def test_genuine_provider_timeout_with_fallback_configured(monkeypatch):
@@ -60,9 +60,9 @@ def test_genuine_provider_timeout_with_fallback_configured(monkeypatch):
     job = {"name": "CI Autofix Poller", "id": "f7fe78574bda"}
     error = "Request timed out."
     msg = _summarize_cron_failure_for_delivery(job, error)
-    assert "did not respond in time" in msg
-    assert "No backup provider succeeded either." in msg
-    assert "No backup provider is configured" not in msg
+    assert "não respondeu a tempo" in msg
+    assert "No provedor de backup funcionou." in msg
+    assert "No provedor de backup is configured" not in msg
 
 
 def test_fallback_chain_phrase_fails_open_on_config_error(monkeypatch):
@@ -70,7 +70,7 @@ def test_fallback_chain_phrase_fails_open_on_config_error(monkeypatch):
         raise RuntimeError("config unreadable")
 
     monkeypatch.setattr(scheduler, "load_config", _raise)
-    assert scheduler._fallback_chain_phrase() == "No backup provider succeeded either."
+    assert scheduler._fallback_chain_phrase() == "No provedor de backup funcionou."
 
 
 def test_readtimeout_error_still_classified_as_provider_timeout(monkeypatch):
@@ -79,7 +79,7 @@ def test_readtimeout_error_still_classified_as_provider_timeout(monkeypatch):
     job = {"name": "some-job", "id": "abc123"}
     error = "httpx.ReadTimeout: The read operation timed out"
     msg = _summarize_cron_failure_for_delivery(job, error)
-    assert "did not respond in time" in msg
+    assert "não respondeu a tempo" in msg
 
 
 def test_rate_limit_classification_still_takes_priority_over_inactivity_text(monkeypatch):
@@ -93,6 +93,6 @@ def test_rate_limit_classification_still_takes_priority_over_inactivity_text(mon
     error = "HTTP 429: weekly usage limit exceeded"
     msg = _summarize_cron_failure_for_delivery(job, error)
     # A usage-limit wall is a billing verdict: it names the limit and the provider-pin fix,
-    # never the transient "backup provider" retry clause.
-    assert "usage or credit limit" in msg
+    # never the transient "provedor de backup" retry clause.
+    assert "limite de uso ou de créditos" in msg
     assert "hermes cron edit abc123 --provider" in msg
