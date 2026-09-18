@@ -1242,8 +1242,10 @@ def _resolve_job_workdir(job: dict, job_id: str) -> Optional[str]:
 def _run_no_agent_job(
     job: dict, job_id: str, job_name: str, cancel_event,
 ) -> tuple[bool, str, str, Optional[str]]:
-    """no_agent short-circuit — the script IS the job (no AIAgent, no tokens). stdout → delivered
-    verbatim; empty stdout or wakeAgent=false → silent success; non-zero exit/timeout → error alert.
+    """no_agent short-circuit — no AIAgent and no model tokens.
+
+    With a script, stdout is delivered verbatim (existing watchdog mode). Without a script,
+    a non-empty prompt is delivered verbatim (static reminder mode).
     """
     # Load .env first so auto-delivery can resolve *_HOME_CHANNEL: the agent path's per-run dotenv
     # reload never runs for no_agent jobs. Does not override existing values.
@@ -1255,10 +1257,16 @@ def _run_no_agent_job(
         logger.debug("Job '%s': no_agent .env reload failed", job_id, exc_info=True)
 
     script_path = job.get("script")
-    # Legacy/hand-edited no_agent job without a script: pause it, or it re-fires every tick.
+    static_message = str(job.get("prompt") or "").strip()
     if not str(script_path or "").strip():
-        from cron.jobs import NO_AGENT_WITHOUT_SCRIPT_ERROR
+        if static_message:
+            now_iso = _hermes_now().strftime("%Y-%m-%d %H:%M:%S")
+            header = _job_doc_header(job_name, job_id, now_iso, "no_agent (static)")
+            logger.info("Job '%s' (no_agent): delivering static prompt without LLM", job_id)
+            return True, f"{header}\n---\n\n{static_message}\n", static_message, None
 
+        # Legacy/hand-edited empty no_agent job: pause it, or it re-fires every tick.
+        from cron.jobs import NO_AGENT_WITHOUT_SCRIPT_ERROR
         return _block_and_pause_job(job_id, job_name, NO_AGENT_WITHOUT_SCRIPT_ERROR)
 
     # Pass workdir as subprocess cwd; never os.chdir() (leaks into concurrent gateway sessions).
