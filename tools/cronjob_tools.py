@@ -564,15 +564,14 @@ def _action_create(a: Dict[str, Any]) -> str:
         return tool_error("schedule is required for create", success=False)
     canonical_skills = _canonical_skills(a["skill"], a["skills"])
     _no_agent = bool(a["no_agent"])
-    # no_agent=True -> the script IS the job (prompt/skills optional); else prompt or skills.
+    # no_agent=True -> deterministic execution with no LLM. A script delivers stdout;
+    # without a script, a non-empty prompt is delivered verbatim as a static reminder.
     if _no_agent:
-        if not script:
+        if not script and not str(prompt or "").strip():
             return tool_error(
-                "create with no_agent=True requires a script — "
-                "the script is the job. In no_agent mode the LLM is "
-                "skipped entirely: prompt and skills are ignored, "
-                "non-empty stdout is delivered verbatim, empty stdout "
-                "sends nothing (watchdog pattern), and a non-zero exit or timeout sends an error alert.",
+                "create with no_agent=True requires a script or a non-empty prompt. "
+                "With a script, stdout is delivered verbatim; without a script, "
+                "the prompt itself is delivered verbatim. No LLM/provider call is made.",
                 success=False)
     elif not prompt and not canonical_skills:
         return tool_error("create requires either prompt or at least one skill", success=False)
