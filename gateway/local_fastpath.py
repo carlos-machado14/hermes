@@ -17,7 +17,7 @@ import re
 import unicodedata
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
@@ -153,6 +153,80 @@ def _ollama_endpoint(base_url: str) -> str:
     if base.endswith("/v1"):
         base = base[:-3]
     return f"{base}/api/chat"
+
+
+def _extract_clock(text: str) -> Optional[tuple[int, int]]:
+    """Extract a user clock time from common PT-BR reminder phrasing."""
+    folded = _fold(text)
+    patterns = (
+        r"\b(?:as|a)\s+(\d{1,2})(?::(\d{2}))?\s*h?\b",
+        r"\b(\d{1,2})h(?:(\d{2}))?\b",
+        r"\b(\d{1,2}):(\d{2})\b",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, folded)
+        if not match:
+            continue
+        hour = int(match.group(1))
+        minute = int(match.group(2) or 0)
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return hour, minute
+    return None
+
+
+def _resolve_relative_one_shot_schedule(
+    text: str,
+    timezone_name: str,
+    *,
+    now: Optional[datetime] = None,
+) -> Optional[str]:
+    """Resolve PT-BR relative one-shot dates deterministically.
+
+    The local model may extract title/message, but it must not do calendar arithmetic for
+    hoje/amanhã/depois de amanhã. This function always uses a fresh timezone-aware clock.
+    """
+    folded = _fold(text)
+    if not _is_explicit_reminder(text):
+        return None
+
+    # Recurring requests belong to the normal schedule parser; do not collapse them into one date.
+    recurring_markers = (
+        "todo dia", "todos os dias", "diariamente", "semanalmente",
+        "a cada ", "cada dia", "dias uteis", "segunda a sexta",
+    )
+    if any(marker in folded for marker in recurring_markers):
+        return None
+
+    days_ahead: Optional[int] = None
+    if re.search(r"\bdepois de amanha\b", folded):
+        days_ahead = 2
+    elif re.search(r"\bamanha\b", folded):
+        days_ahead = 1
+    elif re.search(r"\bhoje\b", folded):
+        days_ahead = 0
+    if days_ahead is None:
+        return None
+
+    clock = _extract_clock(text)
+    if clock is None:
+        return None
+
+    tz = ZoneInfo(timezone_name)
+    current = now.astimezone(tz) if now is not None else datetime.now(tz)
+    target_date = (current + timedelta(days=days_ahead)).date()
+    target = datetime(
+        target_date.year,
+        target_date.month,
+        target_date.day,
+        clock[0],
+        clock[1],
+        tzinfo=tz,
+    )
+
+    # Never silently turn a relative reminder into a time that has already passed.
+    if target <= current:
+        return None
+    return target.isoformat()
 
 
 def _parse_local_json(text: str, cfg: dict[str, Any], timezone_name: str) -> Optional[dict[str, Any]]:
@@ -335,6 +409,18 @@ async def try_handle_local_fastpath(event: Any, source: Any) -> Optional[str]:
             "local_fastpath: parser action mismatch (expected=%s, got=%s); falling back to main",
             expected_action, parsed.get("action") if parsed else None)
         return None
+
+    # Calendar arithmetic is deterministic. For relative one-shot reminders, overwrite any
+    # date produced by the tiny model with a schedule computed from the real current clock.
+    if expected_action == "create":
+        deterministic_schedule = _resolve_relative_one_shot_schedule(text, timezone_name)
+        if deterministic_schedule:
+            parsed["schedule"] = deterministic_schedule
+            logger.info(
+                "local_fastpath: relative reminder resolved deterministically to %s",
+                deterministic_schedule,
+            )
+
     try:
         return await asyncio.to_thread(_handle_action, parsed, source)
     except Exception:
