@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -53,6 +55,45 @@ def test_incidental_quais_does_not_turn_create_into_list():
     )
     assert lf._is_list_request(text) is False
     assert lf._expected_action(text) == "create"
+
+
+def test_amanha_is_resolved_from_real_local_date():
+    tz = ZoneInfo("America/Sao_Paulo")
+    now = datetime(2026, 9, 19, 17, 6, tzinfo=tz)
+
+    schedule = lf._resolve_relative_one_shot_schedule(
+        "Amanhã me lembra às 17h para pegar as coisas do carro",
+        "America/Sao_Paulo",
+        now=now,
+    )
+
+    assert schedule == "2026-09-20T17:00:00-03:00"
+
+
+def test_depois_de_amanha_is_two_calendar_days_ahead():
+    tz = ZoneInfo("America/Sao_Paulo")
+    now = datetime(2026, 9, 19, 8, 0, tzinfo=tz)
+
+    schedule = lf._resolve_relative_one_shot_schedule(
+        "Me lembre depois de amanhã às 09:30 de pagar a conta",
+        "America/Sao_Paulo",
+        now=now,
+    )
+
+    assert schedule == "2026-09-21T09:30:00-03:00"
+
+
+def test_today_in_the_past_is_not_scheduled():
+    tz = ZoneInfo("America/Sao_Paulo")
+    now = datetime(2026, 9, 19, 17, 6, tzinfo=tz)
+
+    schedule = lf._resolve_relative_one_shot_schedule(
+        "Me lembre hoje às 16h de testar",
+        "America/Sao_Paulo",
+        now=now,
+    )
+
+    assert schedule is None
 
 
 def test_create_action_uses_static_no_agent_cron(monkeypatch):
