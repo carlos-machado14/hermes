@@ -116,7 +116,13 @@ jobs:
             git rev-parse --verify "refs/tags/$INSTALL_REF^{commit}" >/dev/null
             tags="$(jq -cn --arg ref "$INSTALL_REF" '[$ref]')"
           else
-            tags="$(scripts/sandbox/pick-release-tags.sh --count "$TAG_COUNT")"
+            # Forks/custom deployments may not publish upstream-style vX.Y.Z releases.
+            # In that case this scheduled E2E suite is not applicable: return an empty
+            # tag set and let the matrix jobs skip cleanly instead of marking the repo red.
+            if ! tags="$(scripts/sandbox/pick-release-tags.sh --count "$TAG_COUNT")"; then
+              echo "No release tags found; Install & Update E2E will be skipped."
+              tags='[]'
+            fi
           fi
           echo "Testing updates from: $tags"
           # Annotate each tag with what its own tree supports, so run
@@ -136,6 +142,7 @@ jobs:
   generate-matrix:
     name: Expand combinations
     needs: pick-releases
+    if: needs.pick-releases.outputs.tags != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -251,13 +258,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: No release tags
+        if: needs.pick-releases.outputs.tags == '[]'
+        run: |
+          {
+            echo "## Install & Update E2E skipped"
+            echo
+            echo "No release tags matching vX.Y.Z were found in this repository."
+            echo "This is expected for custom/fork deployments that do not publish upstream-style releases."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        if: needs.pick-releases.outputs.tags != '[]'
         with:
           sparse-checkout: |
             scripts/sandbox/generate-e2e-matrix.mjs
             tests/install/e2e-assets/known-failures.json
           sparse-checkout-cone-mode: false
-      - env:
+      - if: needs.pick-releases.outputs.tags != '[]'
+        env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
