@@ -29,6 +29,8 @@ hermes config set tools.tool_search.listing off
 hermes config set tools.tool_search.search_default_limit 5
 hermes config set tools.tool_search.max_search_limit 10
 hermes config set tools.tool_search.defer "$DEFER_JSON"
+hermes config set agent.execution_guidance compact
+hermes config set agent.skills_prompt_mode off
 
 echo
 echo "Token-lean tool disclosure configured."
