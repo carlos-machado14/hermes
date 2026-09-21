@@ -119,7 +119,6 @@ export function deleteCronJob(jobId: string): Promise<{ ok: boolean }> {
   })
 }
 
-
 export function converseRoutine(body: RoutineConversationRequest): Promise<RoutineConversationResponse> {
   return hermesApi<RoutineConversationResponse>({
     ...profileScoped(),
@@ -129,7 +128,6 @@ export function converseRoutine(body: RoutineConversationRequest): Promise<Routi
     body
   })
 }
-
 
 export function getRoutineRuns(routineId: string, limit = 20): Promise<RoutineRunsResponse> {
   return hermesApi<RoutineRunsResponse>({
