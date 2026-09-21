@@ -47,6 +47,8 @@ hermes config unset model.context_length >/dev/null 2>&1 || true
 echo "Configuring failover policy..."
 hermes config unset agent.reasoning_effort >/dev/null 2>&1 || true
 hermes config set fallback_providers '[]'
+hermes config set agent.execution_guidance compact
+hermes config set agent.skills_prompt_mode off
 
 echo "Configuring progressive tool disclosure..."
 DEFER_JSON="$(PYTHONPATH="$REPO_ROOT" python3 - <<'PY'
