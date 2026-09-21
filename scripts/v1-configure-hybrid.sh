@@ -19,6 +19,8 @@ fi
 
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 ENV_FILE="$HERMES_HOME/.env"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if ! grep -q '^OPENCODE_GO_API_KEY=' "$ENV_FILE" 2>/dev/null; then
   echo "Missing OPENCODE_GO_API_KEY in $ENV_FILE."
@@ -40,16 +42,26 @@ hermes config set model.default "$MAIN_MODEL"
 hermes config set model.provider "$MAIN_PROVIDER"
 hermes config set model.base_url "$MAIN_BASE_URL"
 hermes config set model.api_mode chat_completions
-# Remove the old local-Qwen override if present. Provider metadata owns the remote context.
 hermes config unset model.context_length >/dev/null 2>&1 || true
 
 echo "Configuring failover policy..."
 hermes config unset agent.reasoning_effort >/dev/null 2>&1 || true
 hermes config set fallback_providers '[]'
 
+echo "Configuring progressive tool disclosure..."
+DEFER_JSON="$(PYTHONPATH="$REPO_ROOT" python3 - <<'PY'
+import json
+from toolsets import _HERMES_CORE_TOOLS
+print(json.dumps([name for name in _HERMES_CORE_TOOLS if name != "clarify"]))
+PY
+)"
+hermes config set tools.tool_search.enabled on
+hermes config set tools.tool_search.listing off
+hermes config set tools.tool_search.search_default_limit 5
+hermes config set tools.tool_search.max_search_limit 10
+hermes config set tools.tool_search.defer "$DEFER_JSON"
+
 echo "Configuring cron model inheritance..."
-# Remove the old fleet-wide Qwen override. Existing jobs retain their creation-time snapshots;
-# new agent-backed jobs snapshot the current main model (MiMo). Static reminders are no_agent.
 hermes config unset cron.model >/dev/null 2>&1 || true
 hermes config unset cron.model_provider >/dev/null 2>&1 || true
 hermes config set cron.wrap_response false
@@ -65,8 +77,8 @@ echo "Hermes V1 hybrid configured."
 echo "  Main:       $MAIN_PROVIDER / $MAIN_MODEL"
 echo "  Local fast: $LOCAL_MODEL @ $LOCAL_BASE_URL"
 echo "  Fallbacks:  disabled"
+echo "  Tools:      progressive disclosure (heavy schemas deferred)"
 echo "  Cron model: per-job snapshot (no fleet override)"
 echo
-echo "Inspect existing jobs, then restart the native gateway:"
-echo "  hermes cron list"
+echo "Restart the native gateway:"
 echo "  hermes gateway restart"
