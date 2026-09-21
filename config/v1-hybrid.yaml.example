@@ -16,7 +16,7 @@ timezone: America/Sao_Paulo
 
 agent:
   execution_guidance: compact
-  skills_prompt_mode: off
+  skills_prompt_mode: false
 
 cron:
   # No fleet-wide model override. Existing jobs keep their creation snapshot; new agent-backed
