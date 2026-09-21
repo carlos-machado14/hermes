@@ -75,7 +75,6 @@ import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
 import { BlueprintSlotControl, blueprintSlotHelp, cleanBlueprintFieldError, initialBlueprintValues } from './blueprints'
 import { mutateAndRefreshCronJobs, refreshCronJobs, triggerAndRefreshCronJobs } from './cron-actions'
-import { RoutineConversation } from './routine-conversation'
 import {
   cronEditorUpdates,
   jobIsScriptOnly,
@@ -632,14 +631,6 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
     setEditor({ mode: 'closed' })
   }
 
-  async function handleRoutineChanged(routine: CronJob | null) {
-    await refresh()
-
-    if (routine?.id) {
-      setSelectedJobId(routine.id)
-    }
-  }
-
   return (
     <Panel closeLabel={c.close} onClose={onClose}>
       <PanelHeader subtitle={c.count(totalCount)} title={c.title} />
@@ -714,16 +705,17 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
               onEdit={() => setEditor({ mode: 'edit', job: selectedJob })}
               onOpenSession={onOpenSession}
               onPauseResume={() => void handlePauseResume(selectedJob)}
-              onRoutineChanged={handleRoutineChanged}
               onTrigger={() => void handleTrigger(selectedJob)}
             />
           ) : query.trim() ? (
             // A search with no selected job: search-flavored copy is right.
             <PanelEmpty description={c.emptyDescSearch} icon="search" />
           ) : (
-            <PanelDetail>
-              <RoutineConversation c={c} onChanged={handleRoutineChanged} />
-            </PanelDetail>
+            <PanelEmpty
+              description={c.emptyDescNew}
+              icon="watch"
+              title={jobs.length === 0 ? c.emptyTitleNew : undefined}
+            />
           )}
         </PanelBody>
       )}
@@ -792,20 +784,10 @@ interface CronJobDetailProps {
   onEdit: () => void
   onOpenSession?: (sessionId: string) => void
   onPauseResume: () => void
-  onRoutineChanged: (routine: CronJob | null) => void | Promise<void>
   onTrigger: () => void
 }
 
-function CronJobDetail({
-  busy,
-  c,
-  job,
-  onEdit,
-  onOpenSession,
-  onPauseResume,
-  onRoutineChanged,
-  onTrigger
-}: CronJobDetailProps) {
+function CronJobDetail({ busy, c, job, onEdit, onOpenSession, onPauseResume, onTrigger }: CronJobDetailProps) {
   const state = jobState(job)
   const isPaused = state === 'paused'
   const deliver = jobDeliver(job)
@@ -866,8 +848,6 @@ function CronJobDetail({
           <PanelBlock>{prompt}</PanelBlock>
         </section>
       ) : null}
-
-      <RoutineConversation c={c} job={job} onChanged={onRoutineChanged} />
 
       <CronJobRuns c={c} jobId={job.id} onOpenSession={onOpenSession} />
     </PanelDetail>
