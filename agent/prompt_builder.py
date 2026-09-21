@@ -494,13 +494,24 @@ OPENAI_MODEL_EXECUTION_GUIDANCE = (
 )
 
 
-def execution_guidance_text() -> str:
-    """OPENAI_MODEL_EXECUTION_GUIDANCE as injected into the system prompt.
+COMPACT_EXECUTION_GUIDANCE = (
+    "# Execution discipline\\n"
+    "Use tools when they materially improve correctness or are required for live/system/file facts. "
+    "Keep working until the requested task is complete; if a result is empty or suspicious, retry once with a "
+    "better approach. Verify state-changing actions by reading the result back when practical. "
+    "Do not invent tool output, identifiers, file contents, current facts, or successful actions. "
+    "Preserve literal values exactly, resolve prerequisites before dependent steps, and ask only when missing "
+    "information cannot be retrieved. Before finishing, check that every explicit requirement was actually met."
+)
 
-    The guidance names no web tool (#39797: a hard "use web_search" overrode SOUL.md and dangled in Blank Slate),
-    so the text is toolset-neutral and needs no per-session filtering.
+
+def execution_guidance_text(compact: bool = False) -> str:
+    """Execution guidance injected into the system prompt.
+
+    compact=True keeps the high-value agentic invariants while avoiding the long diagnostic/checklist
+    block on token-sensitive deployments such as Hermes V1.
     """
-    return OPENAI_MODEL_EXECUTION_GUIDANCE
+    return COMPACT_EXECUTION_GUIDANCE if compact else OPENAI_MODEL_EXECUTION_GUIDANCE
 
 
 # Gemini/Gemma-specific operational guidance, adapted from OpenCode's gemini.txt.
