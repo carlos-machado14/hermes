@@ -93,9 +93,7 @@ This preserves the capabilities while removing the large terminal/browser/file/s
 schemas from trivial requests. The embedded deferred-tool manifest is disabled
 (`tools.tool_search.listing=off`) so the baseline prompt stays small.
 
-The optimization deliberately does **not** disable execution guidance or memory injection yet.
-Those are quality-sensitive and should only be dieted after measuring the savings from tool
-deferral.
+V1 keeps execution discipline in a compact form (`agent.execution_guidance: compact`) and omits the eager skills catalog (`agent.skills_prompt_mode: off`). Skills are not disabled: they remain discoverable through `tool_search` and load with `skill_view` only when needed. Memory injection is unchanged.
 
 For an already-configured V1:
 
