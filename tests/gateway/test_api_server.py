@@ -446,6 +446,59 @@ def auth_adapter():
 
 
 # ---------------------------------------------------------------------------
+# Freud tenant context
+# ---------------------------------------------------------------------------
+
+
+class TestFreudTenantContext:
+    def test_authenticated_api_reads_freud_workspace_headers(self, auth_adapter):
+        request = MagicMock()
+        request.headers = {
+            "X-Freud-Source": "freud",
+            "X-Freud-Organization-Id": "org-123",
+            "X-Freud-User-Id": "user-456",
+            "X-Freud-Conversation-Id": "conv-789",
+        }
+
+        assert auth_adapter._freud_request_context(request) == {
+            "source": "freud",
+            "organization_id": "org-123",
+            "user_id": "user-456",
+            "conversation_id": "conv-789",
+            "routine_id": "",
+            "execution_id": "",
+            "run_id": "",
+        }
+
+    def test_header_context_is_ignored_without_api_key(self, adapter):
+        request = MagicMock()
+        request.headers = {
+            "X-Freud-Source": "freud",
+            "X-Freud-Organization-Id": "org-123",
+        }
+
+        assert adapter._freud_request_context(request) == {}
+
+    def test_bind_maps_freud_company_to_existing_session_context(self, auth_adapter):
+        with patch("gateway.session_context.set_session_vars") as set_vars:
+            set_vars.return_value = []
+            auth_adapter._bind_api_server_session(
+                session_id="session-1",
+                freud_context={
+                    "source": "freud",
+                    "organization_id": "org-123",
+                    "user_id": "user-456",
+                },
+            )
+
+        kwargs = set_vars.call_args.kwargs
+        assert kwargs["platform"] == "api_server"
+        assert kwargs["source"] == "freud"
+        assert kwargs["scope_id"] == "org-123"
+        assert kwargs["user_id"] == "user-456"
+
+
+# ---------------------------------------------------------------------------
 # Adapter internals
 # ---------------------------------------------------------------------------
 
