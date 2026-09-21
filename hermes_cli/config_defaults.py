@@ -139,6 +139,9 @@ DEFAULT_CONFIG = {
         # "auto" = gpt/codex/grok/deepseek/kimi/qwen/glm/minimax/mimo/mistral; true/false = force;
         # or a list of model-name substrings.
         "execution_guidance": "auto",
+        # Eager skills catalog in the system prompt. "auto" keeps the standard behavior; false/off
+        # omits only the always-on index while skills remain available through their tools.
+        "skills_prompt_mode": "auto",
         # When the model narrates an action ("I'll go check the logs...") but emits no tool call,
         # inject a "continue now, execute the tools" nudge and loop (max 2 nudges/turn). Corrective
         # sibling of tool_use_enforcement. "auto" = codex_responses api_mode only; true = all
