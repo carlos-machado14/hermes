@@ -940,65 +940,6 @@ export interface CronJobUpdates {
   schedule?: string
 }
 
-export interface RoutineConversationEvent {
-  type: 'routine.created' | 'routine.updated' | 'routine.paused' | 'routine.resumed' | 'routine.deleted' | 'routine.unchanged'
-  routine_id: null | string
-  routine: CronJob | null
-  changed_fields: string[]
-}
-
-export interface RoutineConversationResponse {
-  object: 'hermes.routine.conversation'
-  conversation_id: string
-  message: { role: 'assistant'; content: string }
-  event: RoutineConversationEvent
-  events: RoutineConversationEvent[]
-  routine: CronJob | null
-  usage?: {
-    input_tokens?: number
-    output_tokens?: number
-    total_tokens?: number
-  }
-}
-
-export interface RoutineConversationRequest {
-  message: string
-  conversation_id?: string
-  routine_id?: string
-}
-
-
-export interface RoutineExecutionResult {
-  kind: 'structured' | 'text'
-  content?: string
-  data?: unknown
-}
-
-export interface RoutineExecution {
-  execution_id: string
-  session_id: string
-  status: 'completed' | 'running'
-  started_at?: null | number
-  finished_at?: null | number
-  last_active?: null | number
-  title?: null | string
-  preview?: null | string
-  input_tokens?: null | number
-  output_tokens?: null | number
-  estimated_cost_usd?: null | number
-  actual_cost_usd?: null | number
-  result: RoutineExecutionResult
-}
-
-export interface RoutineRunsResponse {
-  object: 'hermes.routine.runs'
-  routine_id: string
-  routine: CronJob
-  runs: RoutineExecution[]
-  limit: number
-  offset: number
-}
-
 // A cron delivery target from GET /api/cron/delivery-targets — the single
 // source of truth (cron.scheduler.cron_delivery_targets) for where a cron job
 // can auto-deliver. Only 'local' plus configured gateway platforms appear; a
