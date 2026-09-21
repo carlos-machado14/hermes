@@ -79,6 +79,7 @@ _CAPABILITY_ENDPOINTS = (
     ("models", ("GET", "/v1/models")), ("model_options", ("GET", "/api/model/options")),
     ("chat_completions", ("POST", "/v1/chat/completions")),
     ("routine_conversation", ("POST", "/v1/routines/converse")),
+    ("routine_runs", ("GET", "/v1/routines/{routine_id}/runs")),
     ("responses", ("POST", "/v1/responses")), ("runs", ("POST", "/v1/runs")),
     ("run_status", ("GET", "/v1/runs/{run_id}")),
     ("run_events", ("GET", "/v1/runs/{run_id}/events")),
@@ -1595,6 +1596,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             ("POST", "/api/sessions/{session_id}/model", self._handle_session_model_lock),
             ("POST", "/v1/chat/completions", self._handle_chat_completions),
             ("POST", "/v1/routines/converse", self._handle_routine_converse),
+            ("GET", "/v1/routines/{routine_id}/runs", self._handle_routine_runs),
             ("POST", "/v1/responses", self._handle_responses),
             ("GET", "/v1/responses/{response_id}", self._handle_get_response),
             ("DELETE", "/v1/responses/{response_id}", self._handle_delete_response),
@@ -3430,6 +3432,8 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             "Infer reasonable defaults from natural language; ask a question only when a missing detail "
             "materially prevents a safe schedule or action. Keep routine titles short and semantic. "
             "For recurring research/automation, keep the job agent-backed so it can use Hermes tools at run time. "
+            "For routines created through this API, default delivery to local unless the user explicitly asks for "
+            "Telegram, Discord, Slack, email, or another connected destination. "
             "For a simple static reminder, preserve Hermes' native lightweight/no-agent behavior when appropriate. "
             "After the action, reply naturally and briefly. Do not include JSON or machine metadata in the reply; "
             "the server computes structured events by diffing cron state. "
@@ -3518,6 +3522,91 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             "routine": primary_routine,
             "usage": usage,
         }, headers=self._session_headers(effective_session_id, gateway_session_key))
+
+    @_require_auth
+    async def _handle_routine_runs(self, request: "web.Request") -> "web.Response":
+        """GET /v1/routines/{routine_id}/runs — structured execution history for one routine.
+
+        Cron executions remain ordinary Hermes sessions. This endpoint projects them into a stable
+        routine envelope and automatically exposes a JSON final answer as structured data, while
+        preserving arbitrary text responses without forcing every routine into one fixed schema.
+        """
+        if not _CRON_AVAILABLE:
+            return web.json_response({"error": "Cron module not available"}, status=501)
+        routine_id = str(request.match_info.get("routine_id") or "").strip()
+        if not self._JOB_ID_RE.fullmatch(routine_id):
+            return _invalid_request("routine_id must be a valid Hermes cron job id")
+        routine = _cron_get(routine_id)
+        if not routine:
+            return web.json_response({"error": "Routine not found"}, status=404)
+
+        try:
+            limit = max(1, min(int(request.query.get("limit", "20")), 100))
+        except (TypeError, ValueError):
+            limit = 20
+        try:
+            offset = max(0, int(request.query.get("offset", "0")))
+        except (TypeError, ValueError):
+            offset = 0
+
+        db = await self._ensure_session_db_async()
+        if db is None:
+            return _error_response("Session database unavailable", 503, code="session_db_unavailable")
+
+        try:
+            rows = await asyncio.to_thread(
+                db.list_cron_job_runs, routine_id, limit=limit, offset=offset)
+        except Exception as exc:
+            logger.exception("[api_server] failed listing routine runs")
+            return self._cron_error_response(exc)
+
+        runs: List[Dict[str, Any]] = []
+        for row in rows:
+            session_id = str(row.get("id") or "")
+            history = await self._conversation_history_for_session(session_id) if session_id else []
+            final_text = ""
+            for message in reversed(history):
+                if str(message.get("role") or "") != "assistant":
+                    continue
+                candidate = message.get("content")
+                if isinstance(candidate, str) and candidate.strip():
+                    final_text = candidate.strip()
+                    break
+
+            parsed: Any = None
+            if final_text:
+                with suppress(Exception):
+                    parsed = json.loads(final_text)
+            result_payload: Dict[str, Any]
+            if isinstance(parsed, (dict, list)):
+                result_payload = {"kind": "structured", "data": parsed}
+            else:
+                result_payload = {"kind": "text", "content": final_text}
+
+            runs.append({
+                "execution_id": session_id,
+                "session_id": session_id,
+                "status": "running" if row.get("ended_at") is None else "completed",
+                "started_at": row.get("started_at"),
+                "finished_at": row.get("ended_at"),
+                "last_active": row.get("last_active"),
+                "title": row.get("title"),
+                "preview": row.get("preview"),
+                "input_tokens": row.get("input_tokens"),
+                "output_tokens": row.get("output_tokens"),
+                "estimated_cost_usd": row.get("estimated_cost_usd"),
+                "actual_cost_usd": row.get("actual_cost_usd"),
+                "result": result_payload,
+            })
+
+        return web.json_response({
+            "object": "hermes.routine.runs",
+            "routine_id": routine_id,
+            "routine": self._routine_job_projection(routine),
+            "runs": runs,
+            "limit": limit,
+            "offset": offset,
+        })
 
     # -- Cron jobs API ----------------------------------------------------------------
 
