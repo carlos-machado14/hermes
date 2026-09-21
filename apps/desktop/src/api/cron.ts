@@ -4,9 +4,6 @@ import type {
   CronJob,
   CronJobCreatePayload,
   CronJobUpdates,
-  RoutineConversationRequest,
-  RoutineConversationResponse,
-  RoutineRunsResponse,
   SessionInfo
 } from '@/types/hermes'
 
