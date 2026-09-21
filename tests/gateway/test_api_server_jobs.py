@@ -63,7 +63,6 @@ def _create_app(adapter: APIServerAdapter) -> web.Application:
     app.router.add_post("/api/jobs/{job_id}/pause", adapter._handle_pause_job)
     app.router.add_post("/api/jobs/{job_id}/resume", adapter._handle_resume_job)
     app.router.add_post("/api/jobs/{job_id}/run", adapter._handle_run_job)
-    app.router.add_post("/v1/routines/converse", adapter._handle_routine_converse)
     return app
 
 
@@ -557,99 +556,3 @@ class TestCronPromptScanParity:
                 data = await resp.json()
                 assert "Blocked" in data["error"] or "threat" in data["error"].lower()
                 mock_create.assert_not_called()
-
-
-
-# ---------------------------------------------------------------------------
-# Conversational routine management
-# ---------------------------------------------------------------------------
-
-class TestRoutineConversation:
-    def test_change_events_created(self, adapter):
-        created = {
-            **SAMPLE_JOB,
-            "id": "112233aabbcc",
-            "name": "Morning leads",
-            "state": "scheduled",
-            "next_run_at": "2026-09-22T08:00:00-03:00",
-        }
-
-        events = adapter._routine_change_events([], [created])
-
-        assert events[0]["type"] == "routine.created"
-        assert events[0]["routine_id"] == "112233aabbcc"
-        assert events[0]["routine"]["name"] == "Morning leads"
-
-    def test_change_events_pause_and_resume(self, adapter):
-        before = [{**SAMPLE_JOB, "state": "scheduled", "enabled": True}]
-        paused = [{**SAMPLE_JOB, "state": "paused", "enabled": False}]
-
-        paused_events = adapter._routine_change_events(before, paused)
-        resumed_events = adapter._routine_change_events(paused, before)
-
-        assert paused_events[0]["type"] == "routine.paused"
-        assert resumed_events[0]["type"] == "routine.resumed"
-
-    @pytest.mark.asyncio
-    async def test_converse_returns_structured_created_event(self, adapter):
-        app = _create_app(adapter)
-        created = {
-            **SAMPLE_JOB,
-            "id": "112233aabbcc",
-            "name": "Morning leads",
-            "state": "scheduled",
-            "next_run_at": "2026-09-22T08:00:00-03:00",
-        }
-        lists = [[], [created]]
-
-        async def fake_run_agent(**kwargs):
-            assert "rotina" in kwargs["user_message"].lower()
-            assert "cronjob_manage" in kwargs["ephemeral_system_prompt"]
-            return (
-                {
-                    "final_response": "Rotina criada. Vou executar todos os dias às 8h.",
-                    "session_id": kwargs["session_id"],
-                },
-                {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
-            )
-
-        with patch(f"{_MOD}._CRON_AVAILABLE", True), patch(
-            f"{_MOD}._cron_list", side_effect=lambda include_disabled=True: lists.pop(0)
-        ), patch(
-            f"{_MOD}._cron_get", return_value=None
-        ), patch.object(
-            adapter, "_conversation_history_for_session", return_value=[]
-        ), patch.object(
-            adapter, "_run_agent", side_effect=fake_run_agent
-        ):
-            async with TestClient(TestServer(app)) as cli:
-                resp = await cli.post(
-                    "/v1/routines/converse",
-                    json={"message": "Crie uma rotina todo dia às 8h"},
-                )
-
-        assert resp.status == 200
-        data = await resp.json()
-        assert data["object"] == "hermes.routine.conversation"
-        assert data["event"]["type"] == "routine.created"
-        assert data["routine"]["id"] == "112233aabbcc"
-        assert data["message"]["content"].startswith("Rotina criada")
-        assert data["conversation_id"].startswith("routine-")
-
-    @pytest.mark.asyncio
-    async def test_converse_rejects_unknown_selected_routine(self, adapter):
-        app = _create_app(adapter)
-        with patch(f"{_MOD}._CRON_AVAILABLE", True), patch(
-            f"{_MOD}._cron_list", return_value=[]
-        ), patch(
-            f"{_MOD}._cron_get", return_value=None
-        ):
-            async with TestClient(TestServer(app)) as cli:
-                resp = await cli.post(
-                    "/v1/routines/converse",
-                    json={"message": "Pause essa rotina", "routine_id": VALID_JOB_ID},
-                )
-
-        assert resp.status == 404
-        data = await resp.json()
-        assert data["error"] == "Routine not found"
