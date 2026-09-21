@@ -940,6 +940,33 @@ export interface CronJobUpdates {
   schedule?: string
 }
 
+export interface RoutineConversationEvent {
+  type: 'routine.created' | 'routine.updated' | 'routine.paused' | 'routine.resumed' | 'routine.deleted' | 'routine.unchanged'
+  routine_id: null | string
+  routine: CronJob | null
+  changed_fields: string[]
+}
+
+export interface RoutineConversationResponse {
+  object: 'hermes.routine.conversation'
+  conversation_id: string
+  message: { role: 'assistant'; content: string }
+  event: RoutineConversationEvent
+  events: RoutineConversationEvent[]
+  routine: CronJob | null
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    total_tokens?: number
+  }
+}
+
+export interface RoutineConversationRequest {
+  message: string
+  conversation_id?: string
+  routine_id?: string
+}
+
 // A cron delivery target from GET /api/cron/delivery-targets — the single
 // source of truth (cron.scheduler.cron_delivery_targets) for where a cron job
 // can auto-deliver. Only 'local' plus configured gateway platforms appear; a
