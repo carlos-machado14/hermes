@@ -298,8 +298,13 @@ def _tool_guidance_block(agent: Any) -> Optional[str]:
 
 
 def _skills_prompt(agent: Any) -> str:
-    """Skills index (empty without skills tools).  Focus mode demotes non-coding
-    categories to names-only — never hidden, every name stays visible."""
+    """Skills index, optionally omitted for token-sensitive gateway sessions.
+
+    skills_prompt_mode=off removes only the eager index. Skills remain available through
+    skills_list/skill_view/skill_manage and progressive tool disclosure.
+    """
+    if getattr(agent, "_skills_prompt_mode", "auto") == "off":
+        return ""
     if not any(name in agent.valid_tool_names for name in ['skills_list', 'skill_view', 'skill_manage']):
         return ""
     import model_tools
