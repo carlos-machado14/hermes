@@ -14,6 +14,10 @@ fallback_providers: []
 
 timezone: America/Sao_Paulo
 
+agent:
+  execution_guidance: compact
+  skills_prompt_mode: off
+
 cron:
   # No fleet-wide model override. Existing jobs keep their creation snapshot; new agent-backed
   # jobs snapshot the current main model (MiMo). Static local reminders are no_agent.
