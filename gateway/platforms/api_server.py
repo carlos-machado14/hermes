@@ -1315,6 +1315,40 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         text = str(value).replace("\r", " ").replace("\n", " ").strip()
         return text[:max_len]
 
+    def _request_freud_context(self, request: "web.Request") -> Dict[str, str]:
+        """Parse the optional Freud tenant context carried by trusted API clients.
+
+        Generic OpenAI-compatible callers are unchanged. A request only enters Freud
+        context when X-Freud-Source=freud is present; that mode requires a valid
+        organization id so tenant-scoped tools never run without an owning company.
+        """
+        source = self._clean_log_value(
+            request.headers.get("X-Freud-Source", ""), max_len=16
+        ).lower()
+        if source != "freud":
+            return {}
+
+        def _header(name: str, *, required: bool = False) -> str:
+            value = self._clean_log_value(request.headers.get(name, ""), max_len=160)
+            if not value:
+                if required:
+                    raise ValueError(f"{name} is required for Freud requests")
+                return ""
+            if not re.fullmatch(r"[A-Za-z0-9._:-]+", value):
+                raise ValueError(f"{name} contains invalid characters")
+            return value
+
+        organization_id = _header("X-Freud-Organization-Id", required=True)
+        return {
+            "source": "freud",
+            "organization_id": organization_id,
+            "user_id": _header("X-Freud-User-Id"),
+            "conversation_id": _header("X-Freud-Conversation-Id"),
+            "routine_id": _header("X-Freud-Routine-Id"),
+            "execution_id": _header("X-Freud-Execution-Id"),
+            "run_id": _header("X-Freud-Run-Id"),
+        }
+
     def _request_audit_context(self, request: "web.Request") -> Dict[str, str]:
         """Return non-secret source metadata for security/audit warnings."""
         peer_ip = ""
@@ -3613,7 +3647,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
     def _bind_api_server_session(
         *, chat_id: str = "", session_key: str = "", session_id: str = "", profile: str = "",
         browser_control_principal: str = "", browser_control_transport_family: str = "",
-        session_history_delivery: str = "") -> list:
+        session_history_delivery: str = "", freud_context: Optional[Dict[str, str]] = None) -> list:
         """Bind an API turn with push disabled and history delivery default-denied.
 
         Only routes whose continuation reads SessionDB may pass "1". An omitted
@@ -3623,8 +3657,12 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         reach ``HERMES_SESSION_PROFILE``: the persistent-Docker container key is derived from it, so an
         unbound profile collapses every profile's turns onto the default sandbox (#96370)."""
         from gateway.session_context import set_session_vars
+        freud_context = freud_context or {}
         return set_session_vars(
-            platform="api_server", chat_id=chat_id, session_key=session_key, session_id=session_id,
+            platform="api_server", source=freud_context.get("source", ""),
+            chat_id=chat_id, session_key=session_key, session_id=session_id,
+            user_id=freud_context.get("user_id", ""),
+            scope_id=freud_context.get("organization_id", ""),
             profile=profile, browser_control_principal=browser_control_principal,
             browser_control_transport_family=browser_control_transport_family,
             async_delivery=False, cron_session="", session_history_delivery=session_history_delivery)
@@ -3703,7 +3741,8 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
         requested_runtime: Optional[Dict[str, Any]] = None, route_source: str = "global",
         confirmed_runtime_lock: bool = False, bind_declared_conversation: bool = False,
         session_history_delivery: str = "", turn_author: Optional[Dict[str, Any]] = None,
-        relay_metadata: Optional[Dict[str, Any]] = None) -> tuple:
+        relay_metadata: Optional[Dict[str, Any]] = None,
+        freud_context: Optional[Dict[str, str]] = None) -> tuple:
         """Create an agent and run one turn in a thread executor -> ``(result, usage)``.
         ``agent_ref[0]`` receives the agent so SSE writers can interrupt it; ``active_run_id``
         registers it in ``_active_run_agents``. Under a confirmed model lock the actual
@@ -3726,7 +3765,8 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
                     session_id=session_id or "", profile=request_profile or "",
                     browser_control_principal=request_browser_control_principal,
                     browser_control_transport_family=request_browser_control_transport_family,
-                    session_history_delivery=session_history_delivery)
+                    session_history_delivery=session_history_delivery,
+                    freud_context=freud_context)
                 agent = None
                 try:
                     agent = self._create_agent(

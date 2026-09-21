@@ -377,6 +377,37 @@ class _ResponsesStream:
 class OpenAICompatRoutesMixin:
     """/v1/chat/completions and /v1/responses handlers + SSE writers."""
 
+    def _freud_request_context(self, request: "web.Request") -> Dict[str, str]:
+        """Return trusted Freud tenant context for this API request.
+
+        The context is advisory routing metadata, not authentication. It is only honored when
+        API_SERVER_KEY is configured, so an unauthenticated local OpenAI-compatible client cannot
+        impersonate a Freud workspace by sending X-Freud-* headers.
+        """
+        if not self._api_key:
+            return {}
+        source = request.headers.get("X-Freud-Source", "").strip().lower()
+        organization_id = request.headers.get("X-Freud-Organization-Id", "").strip()
+        if source != "freud" or not organization_id:
+            return {}
+
+        def clean(name: str, max_len: int = 160) -> str:
+            value = request.headers.get(name, "").strip()
+            if not value or len(value) > max_len or re.search(r"[\r\n\x00]", value):
+                return ""
+            return value
+
+        return {
+            "source": "freud",
+            "organization_id": clean("X-Freud-Organization-Id"),
+            "user_id": clean("X-Freud-User-Id"),
+            "conversation_id": clean("X-Freud-Conversation-Id"),
+            "routine_id": clean("X-Freud-Routine-Id"),
+            "execution_id": clean("X-Freud-Execution-Id"),
+            "run_id": clean("X-Freud-Run-Id"),
+        }
+
+
     def _select_request_route(
         self, body: Dict[str, Any], *, session_id, gateway_session_key, model_alias) -> tuple:
         """Resolve the model_routes alias + per-request overrides ->
@@ -423,6 +454,7 @@ class OpenAICompatRoutesMixin:
             return _error_response("Invalid JSON in request body", 400)
         from gateway.platforms.api_server import _request_relay_metadata
         relay_metadata = _request_relay_metadata(body)
+        freud_context = self._freud_request_context(request)
         messages = body.get("messages")
         if not messages or not isinstance(messages, list):
             return _invalid_request("Missing or invalid 'messages' field")
@@ -504,7 +536,7 @@ class OpenAICompatRoutesMixin:
             user_message=user_message, conversation_history=history,
             ephemeral_system_prompt=system_prompt, session_id=session_id,
             gateway_session_key=gateway_session_key, **agent_overrides, route=route,
-            relay_metadata=relay_metadata,
+            relay_metadata=relay_metadata, freud_context=freud_context,
             # #98619: only an explicitly provided X-Hermes-Session-Id is wake-capable (the
             # header is 403-gated on API_SERVER_KEY, so the wake self-post can authenticate
             # and the client can resume the session by sending it again). A fingerprint-derived
@@ -781,6 +813,7 @@ class OpenAICompatRoutesMixin:
             return _invalid_request("Invalid JSON in request body")
         from gateway.platforms.api_server import _request_relay_metadata
         relay_metadata = _request_relay_metadata(body)
+        freud_context = self._freud_request_context(request)
         raw_input = body.get("input")
         if raw_input is None:
             return _error_response("Missing 'input' field", 400)
@@ -861,7 +894,8 @@ class OpenAICompatRoutesMixin:
             user_message=user_message, conversation_history=conversation_history,
             ephemeral_system_prompt=instructions, session_id=session_id,
             gateway_session_key=gateway_session_key, bind_declared_conversation=_declared_selected,
-            **agent_overrides, route=route, relay_metadata=relay_metadata)
+            **agent_overrides, route=route, relay_metadata=relay_metadata,
+            freud_context=freud_context)
         if stream:
             _stream_q = ThreadSafeAsyncQueue()
 
