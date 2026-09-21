@@ -6,6 +6,7 @@ import type {
   CronJobUpdates,
   RoutineConversationRequest,
   RoutineConversationResponse,
+  RoutineRunsResponse,
   SessionInfo
 } from '@/types/hermes'
 
@@ -129,6 +130,15 @@ export function converseRoutine(body: RoutineConversationRequest): Promise<Routi
     path: '/v1/routines/converse',
     method: 'POST',
     body
+  })
+}
+
+
+export function getRoutineRuns(routineId: string, limit = 20): Promise<RoutineRunsResponse> {
+  return hermesApi<RoutineRunsResponse>({
+    ...profileScoped(),
+    ...connectionScoped(),
+    path: `/v1/routines/${encodeURIComponent(routineId)}/runs?limit=${limit}`
   })
 }
 
