@@ -3,7 +3,7 @@
 This is the preferred V1 profile.
 
 ```text
-Telegram
+Telegram / Freud API
    |
    v
 Hermes native gateway
@@ -22,6 +22,7 @@ Hermes native gateway
    +-- conversation / ambiguity / research / web --> MiMo-V2.5
                                                     OpenCode Go
                                                     |
+                                                    +-- progressive tool disclosure
                                                     +-- web/browser
                                                     +-- memory/tasks
                                                     +-- intelligent cron
@@ -77,6 +78,35 @@ http://127.0.0.1:11434
 The local parser uses a small 4K context and JSON-only output. It does not receive the full Hermes
 system prompt or the web/browser schemas.
 
+## Token budget / progressive tools
+
+The full Hermes tool surface is intentionally **not** sent to MiMo on every turn.
+
+V1 enables Hermes' native `tool_search` progressive disclosure and keeps only `clarify`
+ambient. The remaining core capabilities are deferred and are reached through:
+
+```text
+tool_search -> tool_describe -> tool_call
+```
+
+This preserves the capabilities while removing the large terminal/browser/file/skills/cron/etc.
+schemas from trivial requests. The embedded deferred-tool manifest is disabled
+(`tools.tool_search.listing=off`) so the baseline prompt stays small.
+
+The optimization deliberately does **not** disable execution guidance or memory injection yet.
+Those are quality-sensitive and should only be dieted after measuring the savings from tool
+deferral.
+
+For an already-configured V1:
+
+```bash
+bash scripts/v1-optimize-token-budget.sh
+systemctl --user restart hermes-gateway.service
+```
+
+Then repeat a fresh-session API call such as `responda apenas ok` and compare
+`usage.prompt_tokens` with the previous baseline.
+
 ## Cron behavior
 
 Static reminders created by the fast-path use `no_agent=True` with a static prompt. At fire time
@@ -103,18 +133,18 @@ It requires an existing `OPENCODE_GO_API_KEY`.
 
 ## Acceptance tests
 
-After deployment and gateway restart, test in the same Telegram DM:
+After deployment and gateway restart:
 
 1. `Responda somente: OK`
-   - main MiMo path.
+   - main MiMo path; baseline token count should be materially lower than the eager-tool configuration.
 2. `Me lembre em 5 minutos de testar o Hermes`
    - local fast-path; should create a short-title static no-agent cron.
 3. `Quais são minhas rotinas?`
    - deterministic local list; no LLM.
 4. `Pesquise na internet qual é a versão estável atual do Flutter e responda curto.`
-   - main MiMo + web.
+   - main MiMo; the model discovers the web capability on demand.
 5. `Crie uma rotina diária que pesquise vagas Flutter novas e me mande as melhores.`
-   - main MiMo; resulting cron must be agent-backed, not `no_agent`.
+   - main MiMo; cron tooling is discovered on demand and the resulting cron must be agent-backed.
 
 Inspect with:
 
