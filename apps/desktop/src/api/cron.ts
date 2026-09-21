@@ -4,6 +4,8 @@ import type {
   CronJob,
   CronJobCreatePayload,
   CronJobUpdates,
+  RoutineConversationRequest,
+  RoutineConversationResponse,
   SessionInfo
 } from '@/types/hermes'
 
@@ -116,6 +118,17 @@ export function deleteCronJob(jobId: string): Promise<{ ok: boolean }> {
     ...connectionScoped(),
     path: `/api/cron/jobs/${encodeURIComponent(jobId)}`,
     method: 'DELETE'
+  })
+}
+
+
+export function converseRoutine(body: RoutineConversationRequest): Promise<RoutineConversationResponse> {
+  return hermesApi<RoutineConversationResponse>({
+    ...profileScoped(),
+    ...connectionScoped(),
+    path: '/v1/routines/converse',
+    method: 'POST',
+    body
   })
 }
 
