@@ -78,6 +78,7 @@ _CAPABILITY_ENDPOINTS = (
     ("health", ("GET", "/health")), ("health_detailed", ("GET", "/health/detailed")),
     ("models", ("GET", "/v1/models")), ("model_options", ("GET", "/api/model/options")),
     ("chat_completions", ("POST", "/v1/chat/completions")),
+    ("routine_conversation", ("POST", "/v1/routines/converse")),
     ("responses", ("POST", "/v1/responses")), ("runs", ("POST", "/v1/runs")),
     ("run_status", ("GET", "/v1/runs/{run_id}")),
     ("run_events", ("GET", "/v1/runs/{run_id}/events")),
@@ -1593,6 +1594,7 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             ("POST", "/api/sessions/{session_id}/chat/stream", self._handle_session_chat_stream),
             ("POST", "/api/sessions/{session_id}/model", self._handle_session_model_lock),
             ("POST", "/v1/chat/completions", self._handle_chat_completions),
+            ("POST", "/v1/routines/converse", self._handle_routine_converse),
             ("POST", "/v1/responses", self._handle_responses),
             ("GET", "/v1/responses/{response_id}", self._handle_get_response),
             ("DELETE", "/v1/responses/{response_id}", self._handle_delete_response),
@@ -3346,6 +3348,176 @@ class APIServerAdapter(OpenAICompatRoutesMixin, BasePlatformAdapter):
             model_lock="accepted")
         return web.json_response(
             {"object": "hermes.session.model_lock", "session_id": session_id, "runtime": runtime})
+
+    # -- Conversational routines -------------------------------------------------------
+
+    _ROUTINE_EVENT_FIELDS = (
+        "name", "prompt", "schedule", "schedule_display", "deliver", "enabled", "state",
+        "next_run_at", "model", "provider",
+    )
+
+    @classmethod
+    def _routine_job_projection(cls, job: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Stable client-facing routine snapshot.
+
+        Keep this deliberately smaller than the raw cron record: scheduler bookkeeping and provider
+        internals should not become part of the conversational-routine API contract.
+        """
+        if not isinstance(job, dict):
+            return None
+        projected = {"id": job.get("id")}
+        for key in cls._ROUTINE_EVENT_FIELDS:
+            if key in job:
+                projected[key] = job.get(key)
+        return projected
+
+    @classmethod
+    def _routine_change_events(
+        cls, before: List[Dict[str, Any]], after: List[Dict[str, Any]], target_job_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Diff cron state into routine.created/updated/paused/resumed/deleted events."""
+        before_map = {str(j.get("id")): j for j in before if j.get("id")}
+        after_map = {str(j.get("id")): j for j in after if j.get("id")}
+        events: List[Dict[str, Any]] = []
+
+        for job_id in sorted(after_map.keys() - before_map.keys()):
+            events.append({
+                "type": "routine.created",
+                "routine_id": job_id,
+                "routine": cls._routine_job_projection(after_map[job_id]),
+                "changed_fields": list(cls._ROUTINE_EVENT_FIELDS),
+            })
+
+        for job_id in sorted(before_map.keys() & after_map.keys()):
+            old, new = before_map[job_id], after_map[job_id]
+            changed = [key for key in cls._ROUTINE_EVENT_FIELDS if old.get(key) != new.get(key)]
+            if not changed:
+                continue
+            old_state, new_state = str(old.get("state") or ""), str(new.get("state") or "")
+            old_enabled, new_enabled = bool(old.get("enabled", True)), bool(new.get("enabled", True))
+            event_type = "routine.updated"
+            if new_state == "paused" or (old_enabled and not new_enabled):
+                event_type = "routine.paused"
+            elif old_state == "paused" and new_enabled and new_state != "paused":
+                event_type = "routine.resumed"
+            events.append({
+                "type": event_type,
+                "routine_id": job_id,
+                "routine": cls._routine_job_projection(new),
+                "changed_fields": changed,
+            })
+
+        for job_id in sorted(before_map.keys() - after_map.keys()):
+            events.append({
+                "type": "routine.deleted",
+                "routine_id": job_id,
+                "routine": cls._routine_job_projection(before_map[job_id]),
+                "changed_fields": [],
+            })
+
+        if target_job_id:
+            events.sort(key=lambda event: event.get("routine_id") != target_job_id)
+        return events
+
+    @staticmethod
+    def _routine_management_prompt(target: Optional[Dict[str, Any]]) -> str:
+        target_text = json.dumps(target, ensure_ascii=False, default=str) if target else "null"
+        return (
+            "You are managing Hermes routines through a normal conversation. "
+            "A routine is a native Hermes cron job. Use the cronjob_manage capability whenever the "
+            "user asks to create, change, pause, resume, delete, inspect, or otherwise manage a routine. "
+            "Do the action now instead of explaining cron syntax or asking the user to use a form. "
+            "Infer reasonable defaults from natural language; ask a question only when a missing detail "
+            "materially prevents a safe schedule or action. Keep routine titles short and semantic. "
+            "For recurring research/automation, keep the job agent-backed so it can use Hermes tools at run time. "
+            "For a simple static reminder, preserve Hermes' native lightweight/no-agent behavior when appropriate. "
+            "After the action, reply naturally and briefly. Do not include JSON or machine metadata in the reply; "
+            "the server computes structured events by diffing cron state. "
+            f"The routine currently selected by the client is: {target_text}. "
+            "When one is selected, treat references like 'essa rotina', 'ela', 'muda isso', 'pause', or "
+            "'adicione' as referring to that exact routine unless the user explicitly asks for a new one."
+        )
+
+    @_admit_api_agent_request
+    async def _handle_routine_converse(self, request: "web.Request") -> "web.Response":
+        """POST /v1/routines/converse — create and maintain native cron jobs by conversation.
+
+        The model handles natural language and performs cron mutations through the normal Hermes tool
+        surface. The API then diffs cron state and returns deterministic structured routine events, so
+        clients never need to parse assistant prose to discover what changed.
+        """
+        if not _CRON_AVAILABLE:
+            return web.json_response({"error": "Cron module not available"}, status=501)
+        limited = self._concurrency_limited_response()
+        if limited is not None:
+            return limited
+
+        body, body_err = await self._read_json_body(request)
+        if body_err is not None:
+            return body_err
+        message = str(body.get("message") or "").strip()
+        if not message:
+            return _invalid_request("message is required")
+        if len(message) > self._MAX_PROMPT_LENGTH:
+            return _invalid_request(f"message must be ≤ {self._MAX_PROMPT_LENGTH} characters")
+
+        target_job_id = str(body.get("routine_id") or body.get("job_id") or "").strip() or None
+        if target_job_id and not self._JOB_ID_RE.fullmatch(target_job_id):
+            return _invalid_request("routine_id must be a valid Hermes cron job id")
+
+        before = await asyncio.to_thread(_cron_list, True)
+        target = _cron_get(target_job_id) if target_job_id else None
+        if target_job_id and not target:
+            return web.json_response({"error": "Routine not found"}, status=404)
+
+        conversation_id = str(body.get("conversation_id") or "").strip()
+        if conversation_id and (
+            len(conversation_id) > self._MAX_SESSION_HEADER_LEN
+            or re.search(r"[\r\n\x00]", conversation_id)
+        ):
+            return _invalid_request("Invalid conversation_id")
+        if not conversation_id:
+            conversation_id = f"routine-{uuid.uuid4().hex[:16]}"
+
+        gateway_session_key = f"routine:{target_job_id or conversation_id}"
+        history = await self._conversation_history_for_session(conversation_id)
+        system_prompt = self._routine_management_prompt(self._routine_job_projection(target))
+        result, usage = await self._run_agent(
+            user_message=message,
+            conversation_history=history,
+            ephemeral_system_prompt=system_prompt,
+            session_id=conversation_id,
+            gateway_session_key=gateway_session_key,
+            bind_declared_conversation=True,
+        )
+
+        is_dict = isinstance(result, dict)
+        effective_session_id = (
+            str(result.get("session_id") or conversation_id) if is_dict else conversation_id
+        )
+        final_response = _resolve_media_to_data_urls(
+            str(result.get("final_response") or "") if is_dict else ""
+        )
+
+        after = await asyncio.to_thread(_cron_list, True)
+        events = self._routine_change_events(before, after, target_job_id)
+        primary_event = events[0] if events else {
+            "type": "routine.unchanged",
+            "routine_id": target_job_id,
+            "routine": self._routine_job_projection(_cron_get(target_job_id)) if target_job_id else None,
+            "changed_fields": [],
+        }
+        primary_routine = primary_event.get("routine")
+
+        return web.json_response({
+            "object": "hermes.routine.conversation",
+            "conversation_id": effective_session_id,
+            "message": {"role": "assistant", "content": final_response},
+            "event": primary_event,
+            "events": events,
+            "routine": primary_routine,
+            "usage": usage,
+        }, headers=self._session_headers(effective_session_id, gateway_session_key))
 
     # -- Cron jobs API ----------------------------------------------------------------
 
