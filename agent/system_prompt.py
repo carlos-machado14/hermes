@@ -303,7 +303,8 @@ def _skills_prompt(agent: Any) -> str:
     skills_prompt_mode=off removes only the eager index. Skills remain available through
     skills_list/skill_view/skill_manage and progressive tool disclosure.
     """
-    if getattr(agent, "_skills_prompt_mode", "auto") == "off":
+    _skills_mode = str(getattr(agent, "_skills_prompt_mode", "auto")).strip().lower()
+    if _skills_mode in {"off", "false", "0", "no"}:
         return ""
     if not any(name in agent.valid_tool_names for name in ['skills_list', 'skill_view', 'skill_manage']):
         return ""
