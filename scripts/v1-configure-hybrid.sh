@@ -80,7 +80,7 @@ hermes config set local_fastpath.timeout_seconds 15
 
 echo "Configuring optional TypeSafe Jev decision engine..."
 hermes config set jev.base_url https://api.typesafe.ai
-hermes config set jev.model jev
+hermes config set jev.model jev-latest
 hermes config set jev.timeout_seconds 5
 hermes config set jev.min_confidence 0.80
 if grep -q '^TYPESAFE_API_KEY=' "$ENV_FILE" 2>/dev/null; then
