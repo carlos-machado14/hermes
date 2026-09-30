@@ -78,17 +78,17 @@ hermes config set local_fastpath.model "$LOCAL_MODEL"
 hermes config set local_fastpath.base_url "$LOCAL_BASE_URL"
 hermes config set local_fastpath.timeout_seconds 15
 
-echo "Configuring optional TypeSafe Jev decision engine..."
-hermes config set jev.base_url https://api.typesafe.ai
-hermes config set jev.model jev-latest
+echo "Configuring optional OpenCode Zen Jev decision engine..."
+hermes config set jev.base_url https://opencode.ai/zen/v1
+hermes config set jev.model jev-1.13-free
 hermes config set jev.timeout_seconds 5
 hermes config set jev.min_confidence 0.80
-if grep -q '^TYPESAFE_API_KEY=' "$ENV_FILE" 2>/dev/null; then
+if grep -q '^OPENCODE_API_KEY=' "$ENV_FILE" 2>/dev/null; then
   hermes config set jev.enabled true
-  JEV_STATUS="enabled"
+  JEV_STATUS="enabled via OpenCode Zen (jev-1.13-free)"
 else
   hermes config set jev.enabled false
-  JEV_STATUS="disabled (add TYPESAFE_API_KEY to $ENV_FILE to enable)"
+  JEV_STATUS="disabled (add OPENCODE_API_KEY to $ENV_FILE to enable OpenCode Zen Jev)"
 fi
 
 echo
