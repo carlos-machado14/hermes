@@ -3,7 +3,6 @@
 # Main intelligence: OpenCode Go / MiMo-V2.5
 # Local fast-path: Ollama / Qwen3.5 2B, only for explicit simple reminder/routine actions
 # Simple reminders execute as native no-agent cron jobs (zero LLM calls at fire time).
-# Jev is optional and uses OpenCode Zen System One for fast typed workflow decisions.
 
 model:
   default: mimo-v2.5
@@ -91,11 +90,3 @@ local_fastpath:
   model: qwen3.5:2b-q4_K_M
   base_url: http://127.0.0.1:11434
   timeout_seconds: 15
-
-jev:
-  enabled: false
-  base_url: https://opencode.ai/zen/v1
-  model: jev-1.13-free
-  timeout_seconds: 5
-  min_confidence: 0.80
-  # Uses OpenCode Zen credentials, read only from OPENCODE_API_KEY in ~/.hermes/.env.
