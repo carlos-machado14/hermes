@@ -9,7 +9,7 @@ def test_jev_disabled_fails_open():
 
 
 def test_jev_missing_key_fails_open(monkeypatch):
-    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("OPENCODE_API_KEY", raising=False)
     with patch.object(jev_client, "_config", return_value={"enabled": True}):
         assert jev_client.decide("hello", {"x": {"type": "noul"}}) is None
 
@@ -21,7 +21,7 @@ def test_choose_returns_none_when_decision_unavailable():
 
 def test_choose_returns_selected_choice():
     response = {
-        "model": "jev-latest",
+        "model": "jev-1.13-free",
         "answers": {
             "decision": {
                 "type": "choice",
