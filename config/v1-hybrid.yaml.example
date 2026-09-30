@@ -95,7 +95,7 @@ local_fastpath:
 jev:
   enabled: false
   base_url: https://api.typesafe.ai
-  model: jev
+  model: jev-latest
   timeout_seconds: 5
   min_confidence: 0.80
   # API key is read only from TYPESAFE_API_KEY in ~/.hermes/.env.
