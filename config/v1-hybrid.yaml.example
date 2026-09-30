@@ -3,6 +3,7 @@
 # Main intelligence: OpenCode Go / MiMo-V2.5
 # Local fast-path: Ollama / Qwen3.5 2B, only for explicit simple reminder/routine actions
 # Simple reminders execute as native no-agent cron jobs (zero LLM calls at fire time).
+# Jev (TypeSafe) is optional and used for fast typed workflow decisions when configured.
 
 model:
   default: mimo-v2.5
@@ -19,13 +20,11 @@ agent:
   skills_prompt_mode: false
 
 cron:
-  # No fleet-wide model override. Existing jobs keep their creation snapshot; new agent-backed
-  # jobs snapshot the current main model (MiMo). Static local reminders are no_agent.
   wrap_response: false
 
-# Keep the base MiMo request small. All heavy capabilities remain available, but their
-# schemas are disclosed only when the model searches for them. "clarify" intentionally
-# remains direct because Hermes' own A/B tests show that deferring it hurts structured questions.
+# Keep file/terminal tools ambient. This is intentional: on Telegram the model must be able
+# to create an artifact and then return MEDIA:/absolute/path so the native gateway uploads it.
+# Deferring these tools caused smaller models to incorrectly claim that file creation was unavailable.
 tools:
   tool_search:
     enabled: on
@@ -35,12 +34,7 @@ tools:
     defer:
     - web_search
     - web_extract
-    - terminal
     - process_manage
-    - read_file
-    - write_file
-    - patch
-    - search_files
     - vision_analyze
     - image_generate
     - skills_list
@@ -97,3 +91,11 @@ local_fastpath:
   model: qwen3.5:2b-q4_K_M
   base_url: http://127.0.0.1:11434
   timeout_seconds: 15
+
+jev:
+  enabled: false
+  base_url: https://api.typesafe.ai
+  model: jev
+  timeout_seconds: 5
+  min_confidence: 0.80
+  # API key is read only from TYPESAFE_API_KEY in ~/.hermes/.env.
