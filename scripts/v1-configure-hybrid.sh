@@ -50,10 +50,15 @@ hermes config set fallback_providers '[]'
 hermes config set agent.execution_guidance compact
 hermes config set agent.skills_prompt_mode off
 
+echo "Restoring full Telegram toolset..."
+# Important: an old restrictive platform_toolsets.telegram override can hide terminal/file
+# completely before tool_search runs. Force the native Telegram preset so the bot actually
+# receives terminal, file, web, memory, cron, etc.
+hermes config set platform_toolsets.telegram '["hermes-telegram"]'
+
 echo "Configuring progressive tool disclosure..."
-# Artifact creation must stay ambient. Telegram already supports native document delivery from
-# MEDIA:/absolute/path; the regression was that MiMo could not see terminal/file tools and therefore
-# claimed it could not create files. Keep terminal + file primitives direct and defer the rest.
+# Keep artifact creation ambient. The agent can create a file and return MEDIA:/absolute/path,
+# which the native Telegram gateway delivers as a document.
 DEFER_JSON="$(PYTHONPATH="$REPO_ROOT" python3 - <<'PY'
 import json
 from toolsets import _HERMES_CORE_TOOLS
@@ -86,6 +91,7 @@ echo "Hermes V1 hybrid configured."
 echo "  Main:       $MAIN_PROVIDER / $MAIN_MODEL"
 echo "  Local fast: $LOCAL_MODEL @ $LOCAL_BASE_URL"
 echo "  Fallbacks:  disabled"
+echo "  Telegram:   hermes-telegram full preset"
 echo "  Files:      terminal + file tools ambient; Telegram MEDIA delivery enabled"
 echo "  Tools:      progressive disclosure for remaining schemas"
 echo "  Cron model: per-job snapshot (no fleet override)"
