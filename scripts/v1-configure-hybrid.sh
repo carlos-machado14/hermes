@@ -30,7 +30,7 @@ fi
 
 echo "Backing up current Hermes config..."
 mkdir -p "$HERMES_HOME/backups"
-cp "$HERMES_HOME/config.yaml"   "$HERMES_HOME/backups/config-pre-v1-hybrid-$(date +%Y%m%d-%H%M%S).yaml"
+cp "$HERMES_HOME/config.yaml" "$HERMES_HOME/backups/config-pre-v1-hybrid-$(date +%Y%m%d-%H%M%S).yaml"
 
 if ! ollama list | awk 'NR>1 {print $1}' | grep -Fxq "$LOCAL_MODEL"; then
   echo "Pulling local fast-path model: $LOCAL_MODEL"
@@ -51,10 +51,14 @@ hermes config set agent.execution_guidance compact
 hermes config set agent.skills_prompt_mode off
 
 echo "Configuring progressive tool disclosure..."
+# Artifact creation must stay ambient. Telegram already supports native document delivery from
+# MEDIA:/absolute/path; the regression was that MiMo could not see terminal/file tools and therefore
+# claimed it could not create files. Keep terminal + file primitives direct and defer the rest.
 DEFER_JSON="$(PYTHONPATH="$REPO_ROOT" python3 - <<'PY'
 import json
 from toolsets import _HERMES_CORE_TOOLS
-print(json.dumps([name for name in _HERMES_CORE_TOOLS if name != "clarify"]))
+ambient = {"clarify", "terminal", "read_file", "write_file", "patch", "search_files"}
+print(json.dumps([name for name in _HERMES_CORE_TOOLS if name not in ambient]))
 PY
 )"
 hermes config set tools.tool_search.enabled on
@@ -74,12 +78,27 @@ hermes config set local_fastpath.model "$LOCAL_MODEL"
 hermes config set local_fastpath.base_url "$LOCAL_BASE_URL"
 hermes config set local_fastpath.timeout_seconds 15
 
+echo "Configuring optional OpenCode Zen Jev decision engine..."
+hermes config set jev.base_url https://opencode.ai/zen/v1
+hermes config set jev.model jev-1.13-free
+hermes config set jev.timeout_seconds 5
+hermes config set jev.min_confidence 0.80
+if grep -q '^OPENCODE_API_KEY=' "$ENV_FILE" 2>/dev/null; then
+  hermes config set jev.enabled true
+  JEV_STATUS="enabled via OpenCode Zen (jev-1.13-free)"
+else
+  hermes config set jev.enabled false
+  JEV_STATUS="disabled (add OPENCODE_API_KEY to $ENV_FILE to enable OpenCode Zen Jev)"
+fi
+
 echo
 echo "Hermes V1 hybrid configured."
 echo "  Main:       $MAIN_PROVIDER / $MAIN_MODEL"
 echo "  Local fast: $LOCAL_MODEL @ $LOCAL_BASE_URL"
+echo "  Jev:        $JEV_STATUS"
 echo "  Fallbacks:  disabled"
-echo "  Tools:      progressive disclosure (heavy schemas deferred)"
+echo "  Files:      terminal + file tools ambient; Telegram MEDIA delivery enabled"
+echo "  Tools:      progressive disclosure for remaining schemas"
 echo "  Cron model: per-job snapshot (no fleet override)"
 echo
 echo "Restart the native gateway:"
