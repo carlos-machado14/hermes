@@ -1,4 +1,4 @@
-"""Small fail-open client for TypeSafe System One / Jev decisions.
+"""Small fail-open client for Jev through OpenCode Zen System One.
 
 Jev is not a chat model and does not replace MiMo. It is a cheap, low-latency typed
 classifier for routing/scoring/guardrails inside Hermes workflows. The client is optional:
@@ -40,9 +40,9 @@ def decide(
     *,
     min_confidence: Optional[float] = None,
 ) -> Optional[dict[str, Any]]:
-    """Evaluate typed System One questions with Jev.
+    """Evaluate typed System One questions with Jev through OpenCode Zen.
 
-    Returns the TypeSafe response dictionary, or ``None`` on configuration/network/API
+    Returns the OpenCode response dictionary, or ``None`` on configuration/network/API
     failure. Choice/score answers below ``min_confidence`` also fail open. Noul answers
     expose a probability rather than a separate confidence and are left to the caller's
     threshold policy.
@@ -50,18 +50,19 @@ def decide(
     cfg = _config()
     if not enabled():
         return None
-    api_key = os.environ.get("TYPESAFE_API_KEY", "").strip()
+
+    api_key = os.environ.get("OPENCODE_API_KEY", "").strip()
     if not api_key:
-        logger.warning("Jev enabled but TYPESAFE_API_KEY is missing; falling back")
+        logger.warning("Jev enabled but OPENCODE_API_KEY is missing; falling back")
         return None
 
-    base_url = str(cfg.get("base_url") or "https://api.typesafe.ai").rstrip("/")
-    model = str(cfg.get("model") or "jev-latest")
+    base_url = str(cfg.get("base_url") or "https://opencode.ai/zen/v1").rstrip("/")
+    model = str(cfg.get("model") or "jev-1.13-free")
     timeout = float(cfg.get("timeout_seconds") or 5)
     threshold = float(min_confidence if min_confidence is not None else cfg.get("min_confidence", 0.80))
     payload = {"state": state, "model": model, "questions": dict(questions)}
     request = urllib.request.Request(
-        f"{base_url}/v1/systemone",
+        f"{base_url}/systemone",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -86,7 +87,7 @@ def decide(
                     return None
         return result
     except (OSError, ValueError, json.JSONDecodeError, urllib.error.URLError) as exc:
-        logger.warning("Jev request failed; falling back to existing Hermes path: %s", exc)
+        logger.warning("OpenCode Jev request failed; falling back to existing Hermes path: %s", exc)
         return None
 
 
